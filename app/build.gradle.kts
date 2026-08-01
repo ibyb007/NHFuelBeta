@@ -25,6 +25,10 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+
+        // Read MASTER_OWNER_EMAILS from environment variable (GitHub Secret in CI) or local property fallback
+        val ownerEmails = System.getenv("MASTER_OWNER_EMAILS") ?: ""
+        buildConfigField("String", "MASTER_OWNER_EMAILS", "\"$ownerEmails\"")
     }
 
     signingConfigs {
@@ -58,6 +62,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true // Enabled to access BuildConfig.MASTER_OWNER_EMAILS
     }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"

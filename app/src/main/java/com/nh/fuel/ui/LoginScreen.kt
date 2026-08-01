@@ -1,41 +1,76 @@
 package com.nh.fuel.ui
 
+import android.Manifest
 import android.content.Context
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Color
+import android.util.Size
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.camera.core.CameraSelector
+import androidx.camera.core.ImageAnalysis
+import androidx.camera.core.Preview
+import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.PreviewView
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.LocalGasStation
-import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.credentials.CredentialManager
-import androidx.credentials.GetCredentialRequest
-import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.core.content.ContextCompat
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
-import com.nh.fuel.data.AccountStatus
-import com.nh.fuel.data.AppUser
-import kotlinx.coroutines.launch
+import com.google.mlkit.vision.barcode.BarcodeScanning
+import com.google.mlkit.vision.common.InputImage
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.qrcode.QRCodeWriter
+import com.nh.fuel.data.AppUserSession
+import com.nh.fuel.data.KeyStatus
+import com.nh.fuel.data.Role
+import com.nh.fuel.data.StaffAccessKey
+import java.util.Locale
+import java.util.concurrent.Executors
+
+// Master Whitelisted Owner Gmails
+val WHITELISTED_OWNER_GMAILS = listOf(
+    "stationowner@gmail.com",
+    "coowner@gmail.com"
+)
 
 @Composable
 fun LoginScreen(
-    onLoginSuccess: (AppUser) -> Unit
+    onLoginSuccess: (AppUserSession) -> Unit
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
+    var rawInputKey by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
+    var showQrScanner by remember { mutableStateOf(false) }
+
+    val formattedKey = remember(rawInputKey) {
+        val clean = rawInputKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+        if (clean.length > 4) "${clean.take(4)} - ${clean.drop(4).take(4)}" else clean
+    }
 
     Box(
         modifier = Modifier
@@ -56,13 +91,13 @@ fun LoginScreen(
                     .padding(24.dp)
                     .fillMaxWidth(),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.LocalGasStation,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(56.dp)
+                    modifier = Modifier.size(52.dp)
                 )
 
                 Text(
@@ -70,16 +105,46 @@ fun LoginScreen(
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 20.sp,
                     color = MaterialTheme.colorScheme.primary,
-                    letterSpacing = 1.2.sp
+                    letterSpacing = 1.1.sp
                 )
 
                 Text(
-                    text = "Authorized Staff Login",
+                    text = "Staff & Manager Login",
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+
+                // QR Code Scanner Button
+                OutlinedButton(
+                    onClick = { showQrScanner = true },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp),
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text("📷 Scan Staff QR Code", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                Text("— OR ENTER ACCESS KEY —", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+
+                // 8-Character Key Input
+                OutlinedTextField(
+                    value = formattedKey,
+                    onValueChange = { input ->
+                        val clean = input.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+                        if (clean.length <= 8) {
+                            rawInputKey = clean
+                        }
+                    },
+                    label = { Text("8-Character Key (e.g. NH78-K92B)", fontSize = 10.sp) },
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
 
                 if (errorMessage != null) {
                     Text(
@@ -92,34 +157,178 @@ fun LoginScreen(
                 }
 
                 if (isLoading) {
-                    CircularProgressIndicator(modifier = Modifier.size(36.dp))
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
                 } else {
                     Button(
                         onClick = {
-                            scope.launch {
+                            if (rawInputKey.length == 8) {
                                 isLoading = true
                                 errorMessage = null
-                                performGoogleSignIn(
-                                    context = context,
-                                    onSuccess = { user ->
+                                verifyAccessCode(
+                                    code = rawInputKey,
+                                    onSuccess = { session ->
                                         isLoading = false
-                                        onLoginSuccess(user)
+                                        onLoginSuccess(session)
                                     },
                                     onError = { err ->
                                         isLoading = false
                                         errorMessage = err
                                     }
                                 )
+                            } else {
+                                errorMessage = "Please enter a full 8-character access key."
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(48.dp),
-                        shape = RoundedCornerShape(12.dp)
+                            .height(46.dp),
+                        shape = RoundedCornerShape(10.dp)
                     ) {
-                        Icon(Icons.Default.Lock, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Sign In with Google", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("Log In with Access Key", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+
+                // Master Owner Google Sign-In Fallback
+                TextButton(
+                    onClick = {
+                        errorMessage = "Master Owner Google Login initiated."
+                    }
+                ) {
+                    Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Owner Google Sign-In", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    }
+
+    if (showQrScanner) {
+        CameraQrScannerDialog(
+            onDismiss = { showQrScanner = false },
+            onCodeScanned = { scannedCode ->
+                showQrScanner = false
+                val clean = scannedCode.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+                if (clean.length == 8) {
+                    rawInputKey = clean
+                    isLoading = true
+                    verifyAccessCode(
+                        code = clean,
+                        onSuccess = { session ->
+                            isLoading = false
+                            onLoginSuccess(session)
+                        },
+                        onError = { err ->
+                            isLoading = false
+                            errorMessage = err
+                        }
+                    )
+                }
+            }
+        )
+    }
+}
+
+private fun verifyAccessCode(
+    code: String,
+    onSuccess: (AppUserSession) -> Unit,
+    onError: (String) -> Unit
+) {
+    val cleanCode = code.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+    val db = FirebaseFirestore.getInstance()
+
+    db.collection("access_keys")
+        .whereEqualTo("accessCode", cleanCode)
+        .get()
+        .addOnSuccessListener { query ->
+            if (!query.isEmpty) {
+                val doc = query.documents.first()
+                val staffKey = doc.toObject(StaffAccessKey::class.java)
+
+                if (staffKey != null && staffKey.status == KeyStatus.ACTIVE) {
+                    val session = AppUserSession(
+                        emailOrKey = staffKey.accessCode,
+                        displayName = staffKey.nickname,
+                        role = staffKey.role,
+                        canEditPastDates = staffKey.canEditPastDates,
+                        isOwnerLogin = false
+                    )
+                    onSuccess(session)
+                } else {
+                    onError("Access Denied: This key has been revoked by the Admin.")
+                }
+            } else {
+                onError("Invalid Key: Access key not found.")
+            }
+        }
+        .addOnFailureListener {
+            onError("Network error verifying key: ${it.localizedMessage}")
+        }
+}
+
+@Composable
+private fun CameraQrScannerDialog(
+    onDismiss: () -> Unit,
+    onCodeScanned: (String) -> Unit
+) {
+    val context = LocalContext.current
+    var hasCameraPermission by remember {
+        mutableStateOf(ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED)
+    }
+
+    val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        hasCameraPermission = granted
+    }
+
+    LaunchedEffect(Unit) {
+        if (!hasCameraPermission) {
+            launcher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth(0.90f)
+                .height(420.dp),
+            shape = RoundedCornerShape(16.dp),
+            color = MaterialTheme.colorScheme.surface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Scan Staff Login QR Code", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    IconButton(onClick = onDismiss) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
+                }
+
+                if (hasCameraPermission) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .clip(RoundedCornerShape(12.dp))
+                            .border(2.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp))
+                    ) {
+                        CameraPreviewView(onCodeScanned = onCodeScanned)
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Camera permission is required to scan QR code.", fontSize = 12.sp, textAlign = TextAlign.Center)
                     }
                 }
             }
@@ -127,63 +336,81 @@ fun LoginScreen(
     }
 }
 
-private suspend fun performGoogleSignIn(
-    context: Context,
-    onSuccess: (AppUser) -> Unit,
-    onError: (String) -> Unit
-) {
-    try {
-        val credentialManager = CredentialManager.create(context)
-        
-        // Note: WEB_CLIENT_ID will be replaced by your Firebase Web Client ID
-        val googleIdOption = GetGoogleIdOption.Builder()
-            .setFilterByAuthorizedAccounts(false)
-            .setServerClientId("YOUR_FIREBASE_WEB_CLIENT_ID.apps.googleusercontent.com")
-            .build()
+@Composable
+private fun CameraPreviewView(onCodeScanned: (String) -> Unit) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
 
-        val request = GetCredentialRequest.Builder()
-            .addCredentialOption(googleIdOption)
-            .build()
+    AndroidView(
+        factory = { ctx ->
+            val previewView = PreviewView(ctx)
+            val executor = Executors.newSingleThreadExecutor()
+            val cameraProviderFuture = ProcessCameraProvider.getInstance(ctx)
 
-        val result = credentialManager.getCredential(context, request)
-        val credential = result.credential
+            cameraProviderFuture.addListener({
+                val cameraProvider = cameraProviderFuture.get()
+                val preview = Preview.Builder().build().also {
+                    it.setSurfaceProvider(previewView.surfaceProvider)
+                }
 
-        val googleIdToken = credential.data.getString("com.google.android.libraries.identity.googleid.BUNDLE_KEY_ID_TOKEN")
+                val scanner = BarcodeScanning.getClient()
+                val analysis = ImageAnalysis.Builder()
+                    .setTargetResolution(Size(1280, 720))
+                    .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                    .build()
 
-        if (googleIdToken != null) {
-            val authCredential = GoogleAuthProvider.getCredential(googleIdToken, null)
-            val authResult = FirebaseAuth.getInstance().signInWithCredential(authCredential)
-            val signedInUser = authResult.user
-
-            if (signedInUser?.email != null) {
-                // Check if email exists in Whitelisted Users Firestore collection
-                val firestore = FirebaseFirestore.getInstance()
-                firestore.collection("users").document(signedInUser.email!!)
-                    .get()
-                    .addOnSuccessListener { doc ->
-                        if (doc.exists()) {
-                            val user = doc.toObject(AppUser::class.java)
-                            if (user != null && user.status == AccountStatus.ACTIVE) {
-                                onSuccess(user)
-                            } else {
-                                FirebaseAuth.getInstance().signOut()
-                                onError("Access Denied: Account is suspended or inactive.")
+                analysis.setAnalyzer(executor) { imageProxy ->
+                    val mediaImage = imageProxy.image
+                    if (mediaImage != null) {
+                        val inputImage = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
+                        scanner.process(inputImage)
+                            .addOnSuccessListener { barcodes ->
+                                for (barcode in barcodes) {
+                                    val rawValue = barcode.rawValue
+                                    if (!rawValue.isNull_or_blank()) {
+                                        onCodeScanned(rawValue)
+                                        break
+                                    }
+                                }
                             }
-                        } else {
-                            FirebaseAuth.getInstance().signOut()
-                            onError("Access Denied: '${signedInUser.email}' is not authorized by Admin.")
-                        }
+                            .addOnCompleteListener { imageProxy.close() }
+                    } else {
+                        imageProxy.close()
                     }
-                    .addOnFailureListener {
-                        onError("Network error verifying user access: ${it.localizedMessage}")
-                    }
-            } else {
-                onError("Failed to retrieve Google user email.")
-            }
-        } else {
-            onError("Failed to retrieve Google ID Token.")
+                }
+
+                try {
+                    cameraProvider.unbindAll()
+                    cameraProvider.bindToLifecycle(
+                        lifecycleOwner,
+                        CameraSelector.DEFAULT_BACK_CAMERA,
+                        preview,
+                        analysis
+                    )
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }, ContextCompat.getMainExecutor(ctx))
+
+            previewView
+        },
+        modifier = Modifier.fillMaxSize()
+    )
+}
+
+internal fun String.isNull_or_blank(): Boolean = this.trim().isEmpty()
+
+// Utility function to generate QR Code Bitmap bitmap for Admin Panel
+fun generateQrCodeBitmap(text: String, size: Int = 512): Bitmap {
+    val writer = QRCodeWriter()
+    val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size)
+    val width = bitMatrix.width
+    val height = bitMatrix.height
+    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
+    for (x in 0 until width) {
+        for (y in 0 until height) {
+            bmp.setPixel(x, y, if (bitMatrix.get(x, y)) Color.BLACK else Color.WHITE)
         }
-    } catch (e: Exception) {
-        onError("Login Error: ${e.localizedMessage}")
     }
+    return bmp
 }

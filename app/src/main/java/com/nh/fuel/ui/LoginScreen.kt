@@ -26,7 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip // FIXED: Missing clip import added
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -120,7 +120,6 @@ fun LoginScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
 
-                // QR Code Scanner Button
                 OutlinedButton(
                     onClick = { showQrScanner = true },
                     modifier = Modifier
@@ -130,12 +129,11 @@ fun LoginScreen(
                 ) {
                     Icon(Icons.Default.QrCodeScanner, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("📷 Scan Staff QR Code", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Scan Staff QR Code", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
                 Text("— OR ENTER ACCESS KEY —", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
 
-                // 8-Character Key Input
                 OutlinedTextField(
                     value = formattedKey,
                     onValueChange = { input ->
@@ -194,7 +192,6 @@ fun LoginScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
-                // Master Owner Google Sign-In Fallback
                 TextButton(
                     onClick = {
                         errorMessage = "Master Owner Google Login initiated."
@@ -371,7 +368,6 @@ private fun CameraPreviewView(onCodeScanned: (String) -> Unit) {
                             .addOnSuccessListener { barcodes ->
                                 for (barcode in barcodes) {
                                     val rawValue = barcode.rawValue
-                                    // FIXED: Clean String extension safe check
                                     if (!rawValue.isNullOrBlank()) {
                                         onCodeScanned(rawValue)
                                         break
@@ -403,7 +399,6 @@ private fun CameraPreviewView(onCodeScanned: (String) -> Unit) {
     )
 }
 
-// Utility function to generate QR Code Bitmap for Admin Panel
 fun generateQrCodeBitmap(text: String, size: Int = 512): Bitmap {
     val writer = QRCodeWriter()
     val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size)

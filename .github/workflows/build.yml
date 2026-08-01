@@ -45,7 +45,7 @@ jobs:
         echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
 
         # 3. Fetch Changelog since last tag or initial commit
-        PREV_TAG=$(git describe --tags --abbrev=0 2>/devnull || echo "")
+        PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
         if [ -n "$PREV_TAG" ]; then
           echo "Generating changelog since tag: $PREV_TAG"
           CHANGELOG=$(git log ${PREV_TAG}..HEAD --pretty=format:"* %s (%h)")

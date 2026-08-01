@@ -28,7 +28,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.nh.fuel.data.KeyStatus
 import com.nh.fuel.data.Role
 import com.nh.fuel.data.StaffAccessKey
-import com.nh.fuel.data.ThemeMode
+import com.nh.fuel.data.ThemeMode // FIXED: Explicit ThemeMode data model import
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale

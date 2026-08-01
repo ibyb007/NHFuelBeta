@@ -26,6 +26,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip // FIXED: Missing clip import added
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -45,6 +46,7 @@ import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.common.InputImage
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
+import com.nh.fuel.BuildConfig
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.KeyStatus
 import com.nh.fuel.data.Role
@@ -52,11 +54,13 @@ import com.nh.fuel.data.StaffAccessKey
 import java.util.Locale
 import java.util.concurrent.Executors
 
-// Master Whitelisted Owner Gmails
-val WHITELISTED_OWNER_GMAILS = listOf(
-    "stationowner@gmail.com",
-    "coowner@gmail.com"
-)
+// Read whitelisted owner emails injected securely via Gradle BuildConfig / GitHub Secrets
+val WHITELISTED_OWNER_GMAILS: List<String> by lazy {
+    BuildConfig.MASTER_OWNER_EMAILS
+        .split(",")
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+}
 
 @Composable
 fun LoginScreen(
@@ -146,9 +150,9 @@ fun LoginScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                if (errorMessage != null) {
+                errorMessage?.let { err ->
                     Text(
-                        text = errorMessage!!,
+                        text = err,
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -263,7 +267,7 @@ private fun verifyAccessCode(
             }
         }
         .addOnFailureListener {
-            onError("Network error verifying key: ${it.localizedMessage}")
+            onError("Network error verifying key: ${it.localizedMessage ?: "Unknown error"}")
         }
 }
 
@@ -367,7 +371,8 @@ private fun CameraPreviewView(onCodeScanned: (String) -> Unit) {
                             .addOnSuccessListener { barcodes ->
                                 for (barcode in barcodes) {
                                     val rawValue = barcode.rawValue
-                                    if (!rawValue.isNull_or_blank()) {
+                                    // FIXED: Clean String extension safe check
+                                    if (!rawValue.isNullOrBlank()) {
                                         onCodeScanned(rawValue)
                                         break
                                     }
@@ -398,9 +403,7 @@ private fun CameraPreviewView(onCodeScanned: (String) -> Unit) {
     )
 }
 
-internal fun String.isNull_or_blank(): Boolean = this.trim().isEmpty()
-
-// Utility function to generate QR Code Bitmap bitmap for Admin Panel
+// Utility function to generate QR Code Bitmap for Admin Panel
 fun generateQrCodeBitmap(text: String, size: Int = 512): Bitmap {
     val writer = QRCodeWriter()
     val bitMatrix = writer.encode(text, BarcodeFormat.QR_CODE, size, size)

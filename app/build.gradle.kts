@@ -2,6 +2,8 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
+    // Google Services plugin for Firebase Auth & Firestore
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -98,11 +100,29 @@ dependencies {
     // Jetpack DataStore Preferences (For Bottom Navigation Bar Opacity)
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // Gson for Serialization
-    implementation("com.google.code.gson:gson:2.10.1")
-
     // Google Play Services & Google Drive API Client Dependencies
     implementation("com.google.android.gms:play-services-auth:20.7.0")
     implementation("com.google.api-client:google-api-client-android:2.2.0")
     implementation("com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0")
+
+    // --- NEW ADDITIONS FOR AUTH & CLOUD SYNC ---
+
+    // Firebase BOM, Auth & Firestore
+    implementation(platform("com.google.firebase:firebase-bom:33.1.2"))
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+
+    // Google Credential Manager (Sign in with Google)
+    implementation("androidx.credentials:credentials:1.3.0-alpha01")
+    implementation("androidx.credentials:credentials-play-services-auth:1.3.0-alpha01")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.0")
+
+    // QR Code Generator (ZXing)
+    implementation("com.google.zxing:core:3.5.3")
+
+    // CameraX & ML Kit for QR Code Camera Scanning
+    implementation("androidx.camera:camera-camera2:1.3.4")
+    implementation("androidx.camera:camera-lifecycle:1.3.4")
+    implementation("androidx.camera:camera-view:1.3.4")
+    implementation("com.google.mlkit:barcode-scanning:17.2.0")
 }

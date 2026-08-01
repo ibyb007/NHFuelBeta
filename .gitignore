@@ -1,0 +1,9 @@
+# Firebase & Secrets
+app/google-services.json
+app/keystore.jks
+
+# Build outputs
+.gradle/
+build/
+app/build/
+local.properties

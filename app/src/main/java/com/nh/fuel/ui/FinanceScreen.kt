@@ -267,7 +267,7 @@ fun ExpendScreenContent(
                                 val nowTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
                                 onAddOrUpdateExpense(
                                     ExpenseItem(
-                    id = System.currentTimeMillis(),
+                                        id = System.currentTimeMillis(), // Ensures unique document ID for Firestore
                                         date = targetDate,
                                         description = descriptionInput.trim(),
                                         amount = amount,
@@ -1676,7 +1676,8 @@ private fun AddEditCreditDialog(
                                     notes = newNoteLog
                                 )
                             } else {
-                                (initialCredit ?: CreditRecord(date = entryDate)).copy(
+                                (initialCredit ?: CreditRecord(id = System.currentTimeMillis(), date = entryDate)).copy(
+                                    id = initialCredit?.id ?: System.currentTimeMillis(), // Ensures unique ID for new credit customer
                                     date = entryDate,
                                     vehicleNumber = vehicleNo.trim(),
                                     customerName = customerName.trim(),

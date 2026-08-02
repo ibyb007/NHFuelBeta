@@ -1,5 +1,6 @@
 package com.nh.fuel.data
 
+import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -13,11 +14,14 @@ class FirestoreRepository {
         val listener = db.collection("daily_fuel_records")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    Log.e("FirestoreRepository", "Error observing fuel records: ${error.localizedMessage}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val records = snapshot.documents.mapNotNull { it.toObject(DailyFuelRecord::class.java) }
+                    val records = snapshot.documents.mapNotNull { doc ->
+                        runCatching { doc.toObject(DailyFuelRecord::class.java) }.getOrNull()
+                    }
                     trySend(records)
                 }
             }
@@ -25,9 +29,13 @@ class FirestoreRepository {
     }
 
     suspend fun saveFuelRecord(record: DailyFuelRecord) {
+        if (record.date.isBlank()) return
         db.collection("daily_fuel_records")
             .document(record.date)
             .set(record)
+            .addOnFailureListener { e ->
+                Log.e("FirestoreRepository", "Failed to save record: ${e.localizedMessage}")
+            }
     }
 
     // 2. Expenses
@@ -35,11 +43,14 @@ class FirestoreRepository {
         val listener = db.collection("expenses")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    Log.e("FirestoreRepository", "Error observing expenses: ${error.localizedMessage}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val expenses = snapshot.documents.mapNotNull { it.toObject(ExpenseItem::class.java) }
+                    val expenses = snapshot.documents.mapNotNull { doc ->
+                        runCatching { doc.toObject(ExpenseItem::class.java) }.getOrNull()
+                    }
                     trySend(expenses)
                 }
             }
@@ -48,13 +59,16 @@ class FirestoreRepository {
 
     suspend fun saveExpense(expense: ExpenseItem) {
         db.collection("expenses")
-            .document(expense.id.toString()) // FIXED: converted Long to String
+            .document(expense.id.toString())
             .set(expense)
+            .addOnFailureListener { e ->
+                Log.e("FirestoreRepository", "Failed to save expense: ${e.localizedMessage}")
+            }
     }
 
     suspend fun deleteExpense(expense: ExpenseItem) {
         db.collection("expenses")
-            .document(expense.id.toString()) // FIXED: converted Long to String
+            .document(expense.id.toString())
             .delete()
     }
 
@@ -63,11 +77,14 @@ class FirestoreRepository {
         val listener = db.collection("credits")
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    close(error)
+                    Log.e("FirestoreRepository", "Error observing credits: ${error.localizedMessage}")
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val credits = snapshot.documents.mapNotNull { it.toObject(CreditRecord::class.java) }
+                    val credits = snapshot.documents.mapNotNull { doc ->
+                        runCatching { doc.toObject(CreditRecord::class.java) }.getOrNull()
+                    }
                     trySend(credits)
                 }
             }
@@ -76,13 +93,16 @@ class FirestoreRepository {
 
     suspend fun saveCredit(credit: CreditRecord) {
         db.collection("credits")
-            .document(credit.id.toString()) // FIXED: converted Long to String
+            .document(credit.id.toString())
             .set(credit)
+            .addOnFailureListener { e ->
+                Log.e("FirestoreRepository", "Failed to save credit: ${e.localizedMessage}")
+            }
     }
 
     suspend fun deleteCredit(credit: CreditRecord) {
         db.collection("credits")
-            .document(credit.id.toString()) // FIXED: converted Long to String
+            .document(credit.id.toString())
             .delete()
     }
 }

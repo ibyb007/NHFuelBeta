@@ -18,12 +18,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
+import com.google.firebase.firestore.FirebaseFirestore
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
 import com.nh.fuel.data.DispenserShift
 import com.nh.fuel.data.FirestoreRepository
+import com.nh.fuel.data.KeyStatus
 import com.nh.fuel.data.NozzleShift
+import com.nh.fuel.data.StaffAccessKey
 import com.nh.fuel.data.UserSessionManager
 import com.nh.fuel.ui.AppPreferences
 import com.nh.fuel.ui.LoginScreen
@@ -78,6 +81,52 @@ class MainActivity : ComponentActivity() {
                     isCheckingSession = false
                 }
 
+                // --- REAL-TIME ACCESS KEY REVOCATION & PERMISSION SYNCHRONIZER ---
+                LaunchedEffect(currentSession) {
+                    val session = currentSession ?: return@LaunchedEffect
+                    if (!session.isOwnerLogin) {
+                        val db = FirebaseFirestore.getInstance()
+                        val cleanCode = session.emailOrKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+
+                        db.collection("access_keys")
+                            .addSnapshotListener { snapshot, error ->
+                                if (snapshot != null) {
+                                    val matchingDoc = snapshot.documents.find { doc ->
+                                        val keyObj = doc.toObject(StaffAccessKey::class.java)
+                                        keyObj?.accessCode?.replace(Regex("[^A-Za-z0-9]"), "")?.uppercase() == cleanCode
+                                    }
+                                    val keyObj = matchingDoc?.toObject(StaffAccessKey::class.java)
+
+                                    // Kick out immediately if key is deleted or revoked by Admin
+                                    if (matchingDoc == null || keyObj?.status != KeyStatus.ACTIVE) {
+                                        coroutineScope.launch {
+                                            UserSessionManager.clearSession(context)
+                                            currentSession = null
+                                        }
+                                    } else {
+                                        // Live-sync updates (Read-only, Past-date edit, Role, Name)
+                                        if (keyObj.canEditPastDates != session.canEditPastDates ||
+                                            keyObj.role != session.role ||
+                                            keyObj.isReadOnly != session.isReadOnly ||
+                                            keyObj.nickname != session.displayName
+                                        ) {
+                                            val updatedSession = session.copy(
+                                                canEditPastDates = keyObj.canEditPastDates,
+                                                role = keyObj.role,
+                                                isReadOnly = keyObj.isReadOnly,
+                                                displayName = keyObj.nickname
+                                            )
+                                            currentSession = updatedSession
+                                            coroutineScope.launch {
+                                                UserSessionManager.saveSession(context, updatedSession)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                    }
+                }
+
                 if (isCheckingSession) {
                     Box(
                         modifier = Modifier.fillMaxSize(),
@@ -95,6 +144,8 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
+                    val activeSession = currentSession!!
+
                     // --- REALTIME FIRESTORE MULTI-DEVICE SYNC ---
                     val allRecordsFlow = firestoreRepository.observeAllFuelRecords().collectAsState(initial = emptyList())
                     val allRecords = allRecordsFlow.value
@@ -195,6 +246,7 @@ class MainActivity : ComponentActivity() {
                     )
 
                     MainContainerScreen(
+                        session = activeSession,
                         record = currentRecord,
                         allRecords = allRecords,
                         allExpenses = allExpenses,
@@ -202,8 +254,10 @@ class MainActivity : ComponentActivity() {
                         navBarOpacity = navBarOpacity,
                         themeMode = themeMode,
                         onRecordChanged = { updatedRecord ->
-                            coroutineScope.launch {
-                                firestoreRepository.saveFuelRecord(updatedRecord)
+                            if (!activeSession.isReadOnly) {
+                                coroutineScope.launch {
+                                    firestoreRepository.saveFuelRecord(updatedRecord)
+                                }
                             }
                         },
                         onDateSelected = { selectedDate ->
@@ -220,23 +274,37 @@ class MainActivity : ComponentActivity() {
                             }
                         },
                         onAddOrUpdateExpense = { expenseItem ->
-                            coroutineScope.launch {
-                                firestoreRepository.saveExpense(expenseItem)
+                            if (!activeSession.isReadOnly) {
+                                coroutineScope.launch {
+                                    firestoreRepository.saveExpense(expenseItem)
+                                }
                             }
                         },
                         onDeleteExpense = { expenseItem ->
-                            coroutineScope.launch {
-                                firestoreRepository.deleteExpense(expenseItem)
+                            if (!activeSession.isReadOnly) {
+                                coroutineScope.launch {
+                                    firestoreRepository.deleteExpense(expenseItem)
+                                }
                             }
                         },
                         onAddOrUpdateCredit = { creditRecord ->
-                            coroutineScope.launch {
-                                firestoreRepository.saveCredit(creditRecord)
+                            if (!activeSession.isReadOnly) {
+                                coroutineScope.launch {
+                                    firestoreRepository.saveCredit(creditRecord)
+                                }
                             }
                         },
                         onDeleteCredit = { creditRecord ->
+                            if (!activeSession.isReadOnly) {
+                                coroutineScope.launch {
+                                    firestoreRepository.deleteCredit(creditRecord)
+                                }
+                            }
+                        },
+                        onLogout = {
                             coroutineScope.launch {
-                                firestoreRepository.deleteCredit(creditRecord)
+                                UserSessionManager.clearSession(context)
+                                currentSession = null
                             }
                         }
                     )

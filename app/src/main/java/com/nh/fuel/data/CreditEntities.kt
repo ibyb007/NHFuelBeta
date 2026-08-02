@@ -2,14 +2,16 @@ package com.nh.fuel.data
 
 import androidx.room.Entity
 import androidx.room.PrimaryKey
+import com.google.firebase.firestore.IgnoreExtraProperties
 
 enum class CreditFuelType { PETROL, DIESEL, BOTH }
 enum class CreditStatus { UNPAID, PARTIAL, PAID }
 
+@IgnoreExtraProperties
 @Entity(tableName = "credit_records")
 data class CreditRecord(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val date: String,
+    @PrimaryKey val id: Long = System.currentTimeMillis(),
+    val date: String = "",
     val vehicleNumber: String = "",
     val customerName: String = "",
     val mobileNumber: String = "",

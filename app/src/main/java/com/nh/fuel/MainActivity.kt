@@ -7,18 +7,25 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import androidx.room.Room
+import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
 import com.nh.fuel.data.DispenserShift
 import com.nh.fuel.data.FuelDatabase
 import com.nh.fuel.data.NozzleShift
-import com.nh.fuel.data.AppUserSession
+import com.nh.fuel.data.UserSessionManager
 import com.nh.fuel.ui.AppPreferences
 import com.nh.fuel.ui.LoginScreen
 import com.nh.fuel.ui.MainContainerScreen
@@ -66,14 +73,32 @@ class MainActivity : ComponentActivity() {
 
             MaterialTheme(colorScheme = colorScheme) {
                 val coroutineScope = rememberCoroutineScope()
+                val context = LocalContext.current
 
-                // Session State for Login & Access Control
+                // Session State Management & Auto-Login Restorer
                 var currentSession by remember { mutableStateOf<AppUserSession?>(null) }
+                var isCheckingSession by remember { mutableStateOf(true) }
 
-                if (currentSession == null) {
+                // Check for existing saved session on cold start
+                LaunchedEffect(Unit) {
+                    currentSession = UserSessionManager.getSavedSession(context)
+                    isCheckingSession = false
+                }
+
+                if (isCheckingSession) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                } else if (currentSession == null) {
                     LoginScreen(
                         onLoginSuccess = { session ->
                             currentSession = session
+                            coroutineScope.launch {
+                                UserSessionManager.saveSession(context, session)
+                            }
                         }
                     )
                 } else {

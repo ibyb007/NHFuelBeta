@@ -38,7 +38,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.core.content.ContextCompat
+import com.google.android.libraries.identity.googleid.GetGoogleIdOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.firestore.FirebaseFirestore
@@ -51,6 +56,7 @@ import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.KeyStatus
 import com.nh.fuel.data.Role
 import com.nh.fuel.data.StaffAccessKey
+import kotlinx.coroutines.launch
 import java.util.Locale
 import java.util.concurrent.Executors
 
@@ -70,6 +76,9 @@ fun LoginScreen(
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showQrScanner by remember { mutableStateOf(false) }
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     val formattedKey = remember(rawInputKey) {
         val clean = rawInputKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
@@ -192,9 +201,73 @@ fun LoginScreen(
 
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
 
+                // --- REAL GOOGLE SIGN-IN VIA CREDENTIAL MANAGER & FIREBASE ---
                 TextButton(
                     onClick = {
-                        errorMessage = "Master Owner Google Login initiated."
+                        coroutineScope.launch {
+                            try {
+                                isLoading = true
+                                errorMessage = null
+
+                                val credentialManager = CredentialManager.create(context)
+
+                                // Note: Replace with Web Client ID from Firebase Console -> Auth -> Sign-in Method -> Google if needed
+                                val googleIdOption = GetGoogleIdOption.Builder()
+                                    .setFilterByAuthorizedAccounts(false)
+                                    .setAutoSelectEnabled(false)
+                                    .build()
+
+                                val request = GetCredentialRequest.Builder()
+                                    .addCredentialOption(googleIdOption)
+                                    .build()
+
+                                val result = credentialManager.getCredential(context, request)
+                                val credential = result.credential
+
+                                if (credential is androidx.credentials.CustomCredential &&
+                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_KEY
+                                ) {
+                                    val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
+                                    val googleToken = googleIdTokenCredential.idToken
+                                    val googleAuthCredential = GoogleAuthProvider.getCredential(googleToken, null)
+
+                                    FirebaseAuth.getInstance().signInWithCredential(googleAuthCredential)
+                                        .addOnSuccessListener { authResult ->
+                                            isLoading = false
+                                            val user = authResult.user
+                                            val email = user?.email?.lowercase(Locale.getDefault()) ?: ""
+
+                                            // Validate against whitelisted owner emails
+                                            val isWhitelisted = WHITELISTED_OWNER_GMAILS.any {
+                                                it.lowercase(Locale.getDefault()) == email
+                                            }
+
+                                            if (isWhitelisted || WHITELISTED_OWNER_GMAILS.isEmpty()) {
+                                                val session = AppUserSession(
+                                                    emailOrKey = email,
+                                                    displayName = user?.displayName ?: "Station Owner",
+                                                    role = Role.SUPER_ADMIN,
+                                                    canEditPastDates = true,
+                                                    isOwnerLogin = true
+                                                )
+                                                onLoginSuccess(session)
+                                            } else {
+                                                FirebaseAuth.getInstance().signOut()
+                                                errorMessage = "Access Denied: '$email' is not whitelisted."
+                                            }
+                                        }
+                                        .addOnFailureListener { e ->
+                                            isLoading = false
+                                            errorMessage = "Firebase Error: ${e.localizedMessage}"
+                                        }
+                                }
+                            } catch (e: GetCredentialCancellationException) {
+                                isLoading = false
+                            } catch (e: Exception) {
+                                isLoading = false
+                                errorMessage = "Google Sign-In Error: ${e.localizedMessage ?: "Failed to initiate sign-in"}"
+                            }
+                        }
                     }
                 ) {
                     Icon(Icons.Default.VpnKey, contentDescription = null, modifier = Modifier.size(14.dp))

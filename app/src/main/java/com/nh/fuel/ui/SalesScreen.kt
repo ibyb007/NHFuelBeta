@@ -18,6 +18,7 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,10 +31,12 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
 import com.nh.fuel.data.DispenserShift
 import com.nh.fuel.data.ExpenseItem
+import com.nh.fuel.data.Role
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Calendar
@@ -46,6 +49,7 @@ enum class ExportFormat { XLS, CSV, PDF }
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SalesScreen(
+    session: AppUserSession,
     currentRecord: DailyFuelRecord,
     allRecords: List<DailyFuelRecord> = listOf(currentRecord),
     allExpenses: List<ExpenseItem> = emptyList(),
@@ -59,18 +63,27 @@ fun SalesScreen(
     val petrolColor = if (isDark) Color(0xFFFF8A80) else Color(0xFFC62828)
     val dieselColor = if (isDark) Color(0xFF90CAF9) else Color(0xFF1565C0)
 
+    val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+    val isPastDate = currentRecord.date < todayStr
+    val isDayFinalized = currentRecord.shift3.isComplete
+
+    // STRICT EDITING PERMISSION:
+    // Blocked if Read-Only OR Unpermitted Past Date OR Finalized Day for Managers
+    val canEdit = !session.isReadOnly &&
+            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
+            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
+
     var selectedPeriod by remember { mutableStateOf(PeriodFilter.DAY) }
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showExportFormatDialog by remember { mutableStateOf(false) }
-
     var fromDateInput by remember { mutableStateOf(currentRecord.date) }
     var toDateInput by remember { mutableStateOf(currentRecord.date) }
 
-    var petrolPriceText by remember(currentRecord.date) { 
-        mutableStateOf(if (currentRecord.petrolPrice == 0.0) "" else currentRecord.petrolPrice.toString()) 
+    var petrolPriceText by remember(currentRecord.date) {
+        mutableStateOf(if (currentRecord.petrolPrice == 0.0) "" else currentRecord.petrolPrice.toString())
     }
-    var dieselPriceText by remember(currentRecord.date) { 
-        mutableStateOf(if (currentRecord.dieselPrice == 0.0) "" else currentRecord.dieselPrice.toString()) 
+    var dieselPriceText by remember(currentRecord.date) {
+        mutableStateOf(if (currentRecord.dieselPrice == 0.0) "" else currentRecord.dieselPrice.toString())
     }
 
     val filteredRecords = remember(selectedPeriod, currentRecord, fromDateInput, toDateInput, allRecords) {
@@ -78,10 +91,8 @@ fun SalesScreen(
         val records = if (allRecords.none { it.date == currentRecord.date }) {
             allRecords + currentRecord
         } else allRecords
-
         val targetDate = try { sdf.parse(currentRecord.date) ?: Date() } catch (e: Exception) { Date() }
         val cal = Calendar.getInstance().apply { time = targetDate }
-
         when (selectedPeriod) {
             PeriodFilter.DAY -> records.filter { it.date == currentRecord.date }
             PeriodFilter.WEEK -> {
@@ -154,6 +165,31 @@ fun SalesScreen(
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
+        if (!canEdit) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = when {
+                            session.isReadOnly -> "Read-Only Mode: Sales entries are locked."
+                            isDayFinalized -> "Day Finalized: Sales entries for ${currentRecord.date} are locked and sealed."
+                            else -> "Past Date Locked: You do not have permission to edit past sales data (${currentRecord.date})."
+                        },
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        }
+
         Text(
             text = "Sales & Revenue Dashboard",
             fontWeight = FontWeight.Bold,
@@ -225,7 +261,7 @@ fun SalesScreen(
                     OutlinedTextField(
                         value = petrolPriceText,
                         onValueChange = { input ->
-                            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+                            if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                                 petrolPriceText = input
                                 val valParsed = input.toDoubleOrNull() ?: 0.0
                                 onRecordChanged(currentRecord.copy(petrolPrice = valParsed))
@@ -234,13 +270,14 @@ fun SalesScreen(
                         label = { Text("Petrol Price (₹)", fontSize = 9.sp) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.weight(1f)
                     )
 
                     OutlinedTextField(
                         value = dieselPriceText,
                         onValueChange = { input ->
-                            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+                            if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                                 dieselPriceText = input
                                 val valParsed = input.toDoubleOrNull() ?: 0.0
                                 onRecordChanged(currentRecord.copy(dieselPrice = valParsed))
@@ -249,6 +286,7 @@ fun SalesScreen(
                         label = { Text("Diesel Price (₹)", fontSize = 9.sp) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -305,8 +343,9 @@ fun SalesScreen(
                 dieselPrice = currentRecord.dieselPrice,
                 petrolColor = petrolColor,
                 dieselColor = dieselColor,
+                canEdit = canEdit,
                 onShiftUpdated = { updatedShift ->
-                    onRecordChanged(currentRecord.copy(shift1 = updatedShift))
+                    if (canEdit) onRecordChanged(currentRecord.copy(shift1 = updatedShift))
                 }
             )
 
@@ -317,8 +356,9 @@ fun SalesScreen(
                 dieselPrice = currentRecord.dieselPrice,
                 petrolColor = petrolColor,
                 dieselColor = dieselColor,
+                canEdit = canEdit,
                 onShiftUpdated = { updatedShift ->
-                    onRecordChanged(currentRecord.copy(shift2 = updatedShift))
+                    if (canEdit) onRecordChanged(currentRecord.copy(shift2 = updatedShift))
                 }
             )
 
@@ -329,8 +369,9 @@ fun SalesScreen(
                 dieselPrice = currentRecord.dieselPrice,
                 petrolColor = petrolColor,
                 dieselColor = dieselColor,
+                canEdit = canEdit,
                 onShiftUpdated = { updatedShift ->
-                    onRecordChanged(currentRecord.copy(shift3 = updatedShift))
+                    if (canEdit) onRecordChanged(currentRecord.copy(shift3 = updatedShift))
                 }
             )
         }
@@ -349,49 +390,49 @@ fun SalesScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "• Petrol Sold: $totalPetrolLitre L → ₹ ${formatCurrency(totalPetrolRevenue)}",
+                    text = "  Petrol Sold: $totalPetrolLitre L   ${formatCurrency(totalPetrolRevenue)}",
                     fontWeight = FontWeight.Bold,
                     color = petrolColor,
                     fontSize = 12.sp
                 )
                 Text(
-                    text = "• Diesel Sold: $totalDieselLitre L → ₹ ${formatCurrency(totalDieselRevenue)}",
+                    text = "  Diesel Sold: $totalDieselLitre L   ${formatCurrency(totalDieselRevenue)}",
                     fontWeight = FontWeight.Bold,
                     color = dieselColor,
                     fontSize = 12.sp
                 )
                 Text(
-                    text = "• Grand Calculated Revenue: ₹ ${formatCurrency(grandTotalRevenue)}",
+                    text = "  Grand Calculated Revenue:   ${formatCurrency(grandTotalRevenue)}",
                     fontWeight = FontWeight.ExtraBold,
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
                 Text(
-                    text = "• Cash Collected: ₹ ${formatCurrency(totalCashCollected)}",
+                    text = "  Cash Collected:   ${formatCurrency(totalCashCollected)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "• Digital Collected: ₹ ${formatCurrency(totalDigitalCollected)}",
+                    text = "  Digital Collected:   ${formatCurrency(totalDigitalCollected)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "• Credit (Lend) Given: ₹ ${formatCurrency(totalCreditCollected)}",
+                    text = "  Credit (Lend) Given:   ${formatCurrency(totalCreditCollected)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = "• Total Payment Settled: ₹ ${formatCurrency(totalCollected)}",
+                    text = "  Total Payment Settled:   ${formatCurrency(totalCollected)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 12.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
-                
+
                 val mismatchColor = when {
                     totalMismatch > 0.0 -> Color(0xFF2E7D32)
                     totalMismatch < 0.0 -> Color(0xFFC62828)
@@ -459,7 +500,6 @@ fun SalesScreen(
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
                     OutlinedButton(
                         onClick = {
                             showExportFormatDialog = false
@@ -469,7 +509,6 @@ fun SalesScreen(
                     ) {
                         Text(".XLS (Excel Table with Refill Data)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
-
                     OutlinedButton(
                         onClick = {
                             showExportFormatDialog = false
@@ -479,7 +518,6 @@ fun SalesScreen(
                     ) {
                         Text(".CSV (Plain Text Spreadsheet)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                     }
-
                     OutlinedButton(
                         onClick = {
                             showExportFormatDialog = false
@@ -509,6 +547,7 @@ private fun ShiftDetailedSalesBlock(
     dieselPrice: Double,
     petrolColor: Color,
     dieselColor: Color,
+    canEdit: Boolean = true,
     onShiftUpdated: (DayShift) -> Unit
 ) {
     val shiftRevenue = shift.getRevenue(petrolPrice, dieselPrice)
@@ -528,7 +567,7 @@ private fun ShiftDetailedSalesBlock(
             ) {
                 Text(shiftTitle, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    text = "Shift Revenue: ₹ ${formatCurrency(shiftRevenue)}",
+                    text = "Shift Revenue:   ${formatCurrency(shiftRevenue)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.primary
@@ -543,9 +582,10 @@ private fun ShiftDetailedSalesBlock(
                     dieselPrice = dieselPrice,
                     petrolColor = petrolColor,
                     dieselColor = dieselColor,
+                    canEdit = canEdit,
                     modifier = Modifier.weight(1f),
                     onDispenserUpdated = { updatedMpd1 ->
-                        onShiftUpdated(shift.copy(mpd1 = updatedMpd1))
+                        if (canEdit) onShiftUpdated(shift.copy(mpd1 = updatedMpd1))
                     }
                 )
 
@@ -556,9 +596,10 @@ private fun ShiftDetailedSalesBlock(
                     dieselPrice = dieselPrice,
                     petrolColor = petrolColor,
                     dieselColor = dieselColor,
+                    canEdit = canEdit,
                     modifier = Modifier.weight(1f),
                     onDispenserUpdated = { updatedMpd2 ->
-                        onShiftUpdated(shift.copy(mpd2 = updatedMpd2))
+                        if (canEdit) onShiftUpdated(shift.copy(mpd2 = updatedMpd2))
                     }
                 )
             }
@@ -577,7 +618,7 @@ private fun ShiftDetailedSalesBlock(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "Shift Collected: ₹ ${formatCurrency(shift.totalCollected)}",
+                    text = "Shift Collected:   ${formatCurrency(shift.totalCollected)}",
                     fontWeight = FontWeight.Bold,
                     fontSize = 10.sp,
                     color = MaterialTheme.colorScheme.onSurface
@@ -601,6 +642,7 @@ private fun MpdSalesColumn(
     dieselPrice: Double,
     petrolColor: Color,
     dieselColor: Color,
+    canEdit: Boolean = true,
     modifier: Modifier = Modifier,
     onDispenserUpdated: (DispenserShift) -> Unit
 ) {
@@ -625,55 +667,57 @@ private fun MpdSalesColumn(
     ) {
         Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(mpdTitle, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-
-            Text("Petrol (${dispenser.petrolSale} L): ₹ ${formatCurrency(petrolRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = petrolColor)
-            Text("Diesel (${dispenser.dieselSale} L): ₹ ${formatCurrency(dieselRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = dieselColor)
-            Text("MPD Revenue: ₹ ${formatCurrency(mpdRevenue)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+            Text("Petrol (${dispenser.petrolSale} L):   ${formatCurrency(petrolRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = petrolColor)
+            Text("Diesel (${dispenser.dieselSale} L):   ${formatCurrency(dieselRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = dieselColor)
+            Text("MPD Revenue:   ${formatCurrency(mpdRevenue)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
 
             OutlinedTextField(
                 value = cashText,
                 onValueChange = { input ->
-                    if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+                    if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                         cashText = input
                         val parsed = input.toDoubleOrNull() ?: 0.0
                         onDispenserUpdated(dispenser.copy(cashCollected = parsed))
                     }
                 },
-                label = { Text("Cash ₹", fontSize = 8.sp) },
+                label = { Text("Cash  ", fontSize = 8.sp) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
+                enabled = canEdit,
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = digitalText,
                 onValueChange = { input ->
-                    if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+                    if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                         digitalText = input
                         val parsed = input.toDoubleOrNull() ?: 0.0
                         onDispenserUpdated(dispenser.copy(digitalCollected = parsed))
                     }
                 },
-                label = { Text("Digital ₹", fontSize = 8.sp) },
+                label = { Text("Digital  ", fontSize = 8.sp) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
+                enabled = canEdit,
                 modifier = Modifier.fillMaxWidth()
             )
 
             OutlinedTextField(
                 value = creditText,
                 onValueChange = { input ->
-                    if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+                    if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                         creditText = input
                         val parsed = input.toDoubleOrNull() ?: 0.0
                         onDispenserUpdated(dispenser.copy(creditCollected = parsed))
                     }
                 },
-                label = { Text("Credit (Lend) ₹", fontSize = 8.sp) },
+                label = { Text("Credit (Lend)  ", fontSize = 8.sp) },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
+                enabled = canEdit,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -684,11 +728,12 @@ private fun MpdSalesColumn(
             }
 
             Text(
-                text = "Collected: ₹ ${formatCurrency(dispenser.totalCollected)}",
+                text = "Collected:   ${formatCurrency(dispenser.totalCollected)}",
                 fontSize = 9.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface
             )
+
             Text(
                 text = "Mismatch: ${formatSignedCurrency(mpdMismatch)}",
                 fontSize = 9.sp,
@@ -705,7 +750,7 @@ private fun formatCurrency(amount: Double): String {
 
 private fun formatSignedCurrency(amount: Double): String {
     val sign = if (amount > 0.0) "+" else ""
-    return "$sign₹ ${String.format(Locale.getDefault(), "%.2f", amount)}"
+    return "$sign  ${String.format(Locale.getDefault(), "%.2f", amount)}"
 }
 
 private fun exportSalesRecord(
@@ -734,7 +779,6 @@ private fun exportSalesRecord(
     val sumCredit = records.sumOf { it.dailyCreditCollected }
     val sumTotalCollected = records.sumOf { it.dailyTotalCollected }
     val sumMismatch = records.sumOf { it.dailyMismatch }
-
     val sumExpenses = records.sumOf { record ->
         allExpenses.filter { it.date == record.date }.sumOf { it.amount }
     }
@@ -746,25 +790,20 @@ private fun exportSalesRecord(
                 append("NH Fuel Station Sales Report\n")
                 append("Report Period: $periodDescription\n\n")
                 append("Date,Petrol Sold (L),Petrol Refill (L),Petrol Rate (Rs),Petrol Revenue (Rs),Petrol Stock (L),Diesel Sold (L),Diesel Refill (L),Diesel Rate (Rs),Diesel Revenue (Rs),Diesel Stock (L),Grand Total Revenue (Rs),Cash Collected (Rs),Digital Collected (Rs),Credit (Lend) (Rs),Total Payment Collected (Rs),Total Mismatch (Rs),Petrol Var (L),Diesel Var (L),Net Var (L),Expenses (Rs)\n")
-
                 records.forEach { record ->
                     val dayExpense = allExpenses.filter { it.date == record.date }.sumOf { it.amount }
                     val netVar = record.petrolVariation + record.dieselVariation
                     val rawMismatch = String.format(Locale.US, "%.2f", record.dailyMismatch)
-
                     append("${record.date},${record.totalPetrolSell},${record.petrolRefill},${record.petrolPrice},${formatCurrency(record.totalPetrolRevenue)},${record.currentPetrolStorage},${record.totalDieselSell},${record.dieselRefill},${record.dieselPrice},${formatCurrency(record.totalDieselRevenue)},${record.currentDieselStorage},${formatCurrency(record.grandTotalRevenue)},${formatCurrency(record.dailyCashCollected)},${formatCurrency(record.dailyDigitalCollected)},${formatCurrency(record.dailyCreditCollected)},${formatCurrency(record.dailyTotalCollected)},$rawMismatch,${record.petrolVariation},${record.dieselVariation},$netVar,${formatCurrency(dayExpense)}\n")
                 }
-
                 if (isMultiDay) {
                     val rawSumMismatch = String.format(Locale.US, "%.2f", sumMismatch)
                     append("GRAND TOTAL,$sumPetrolLitre,$sumPetrolRefill,-,${formatCurrency(sumPetrolRev)},-,$sumDieselLitre,$sumDieselRefill,-,${formatCurrency(sumDieselRev)},-,${formatCurrency(sumGrandRev)},${formatCurrency(sumCash)},${formatCurrency(sumDigital)},${formatCurrency(sumCredit)},${formatCurrency(sumTotalCollected)},$rawSumMismatch,$sumPetrolVar,$sumDieselVar,$sumNetVar,${formatCurrency(sumExpenses)}\n")
                 }
             }
-
             try {
                 val file = File(context.cacheDir, "NHFuel_Sales_Report_$fileTimestamp.csv")
                 file.writeText(csvBuilder.toString(), Charsets.UTF_8)
-
                 val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                 val shareIntent = Intent(Intent.ACTION_SEND).apply {
                     type = "text/csv"
@@ -777,10 +816,8 @@ private fun exportSalesRecord(
                 e.printStackTrace()
             }
         }
-
         ExportFormat.XLS, ExportFormat.PDF -> {
             val totalColumns = 21
-
             val htmlContent = StringBuilder().apply {
                 append("<!DOCTYPE html><html><head><meta charset=\"UTF-8\">")
                 append("<title>NH Fuel Station Sales Report</title><style>")
@@ -793,12 +830,10 @@ private fun exportSalesRecord(
                 append(".grand-total-row td { background-color: #FFF9C4; color: #000000; font-weight: bold; }")
                 append(".number-cell { text-align: right; }")
                 append("</style></head><body>")
-
                 append("<table>")
                 append("<tr><td colspan=\"$totalColumns\" class=\"report-title\">NH Fuel Station Sales Report</td></tr>")
                 append("<tr><td colspan=\"$totalColumns\" class=\"period-title\">Report Period: $periodDescription</td></tr>")
                 append("<tr><td colspan=\"$totalColumns\" style=\"border: none; height: 10px;\"></td></tr>")
-
                 append("<tr class=\"header-row\">")
                 append("<th>Date</th>")
                 append("<th>Petrol Sold (L)</th>")
@@ -822,12 +857,10 @@ private fun exportSalesRecord(
                 append("<th>Net Var (L)</th>")
                 append("<th>Expenses (Rs)</th>")
                 append("</tr>")
-
                 records.forEach { record ->
                     val dayExpense = allExpenses.filter { it.date == record.date }.sumOf { it.amount }
                     val netVar = record.petrolVariation + record.dieselVariation
                     val rawMismatch = String.format(Locale.US, "%.2f", record.dailyMismatch)
-
                     append("<tr>")
                     append("<td>${record.date}</td>")
                     append("<td class=\"number-cell\">${record.totalPetrolSell}</td>")
@@ -852,7 +885,6 @@ private fun exportSalesRecord(
                     append("<td class=\"number-cell\">${formatCurrency(dayExpense)}</td>")
                     append("</tr>")
                 }
-
                 if (isMultiDay) {
                     val rawSumMismatch = String.format(Locale.US, "%.2f", sumMismatch)
                     append("<tr class=\"grand-total-row\">")
@@ -879,15 +911,12 @@ private fun exportSalesRecord(
                     append("<td class=\"number-cell\">${formatCurrency(sumExpenses)}</td>")
                     append("</tr>")
                 }
-
                 append("</table></body></html>")
             }
-
             if (format == ExportFormat.XLS) {
                 try {
                     val file = File(context.cacheDir, "NHFuel_Sales_Report_${fileTimestamp}.xls")
                     file.writeText(htmlContent.toString(), Charsets.UTF_8)
-
                     val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
                     val shareIntent = Intent(Intent.ACTION_SEND).apply {
                         type = "application/vnd.ms-excel"
@@ -900,7 +929,6 @@ private fun exportSalesRecord(
                     e.printStackTrace()
                 }
             } else {
-                // Native PDF Printing via PrintManager
                 try {
                     val webView = WebView(context).apply {
                         webViewClient = object : WebViewClient() {

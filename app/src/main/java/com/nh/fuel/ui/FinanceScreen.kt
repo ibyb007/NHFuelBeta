@@ -267,6 +267,7 @@ fun ExpendScreenContent(
                                 val nowTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
                                 onAddOrUpdateExpense(
                                     ExpenseItem(
+                    id = System.currentTimeMillis(),
                                         date = targetDate,
                                         description = descriptionInput.trim(),
                                         amount = amount,

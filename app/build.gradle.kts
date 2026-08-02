@@ -6,20 +6,26 @@ plugins {
     id("com.google.gms.google-services")
 }
 
+// --------------------------------------------------------------------------
+// MANUALLY EDIT THIS STRING WHENEVER YOU WANT A NEW VERSION
+// (e.g. "1.0", "1.0.1", "1.1", "2.0")
+// --------------------------------------------------------------------------
+val appVersionName = "1.0"
+
+// versionCode is an integer for Android internal updates.
+// Passed via -PversionCode from CI, or defaults to 1 for local builds.
+val vCode = (project.findProperty("versionCode") as String?)?.toIntOrNull() ?: 1
+
 android {
     namespace = "com.nh.fuel"
     compileSdk = 34
-
-    // Dynamic Versioning from Gradle Properties (Passed via GitHub Actions workflow)
-    val vCode = project.findProperty("versionCode")?.toString()?.toIntOrNull() ?: 1
-    val vName = project.findProperty("versionName")?.toString() ?: "1.0"
 
     defaultConfig {
         applicationId = "com.nh.fuel"
         minSdk = 24
         targetSdk = 34
         versionCode = vCode
-        versionName = vName
+        versionName = appVersionName
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true

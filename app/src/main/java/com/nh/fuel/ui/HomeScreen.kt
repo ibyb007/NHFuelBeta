@@ -40,6 +40,7 @@ import kotlin.math.max
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainContainerScreen(
+    session: AppUserSession,
     record: DailyFuelRecord,
     allRecords: List<DailyFuelRecord> = emptyList(),
     allExpenses: List<ExpenseItem> = emptyList(),
@@ -53,7 +54,8 @@ fun MainContainerScreen(
     onAddOrUpdateExpense: (ExpenseItem) -> Unit = {},
     onDeleteExpense: (ExpenseItem) -> Unit = {},
     onAddOrUpdateCredit: (CreditRecord) -> Unit = {},
-    onDeleteCredit: (CreditRecord) -> Unit = {}
+    onDeleteCredit: (CreditRecord) -> Unit = {},
+    onLogout: () -> Unit = {}
 ) {
     var selectedMainTab by remember { mutableStateOf(0) }
     var currentTimeString by remember { mutableStateOf("") }
@@ -73,11 +75,12 @@ fun MainContainerScreen(
     ) {
         val topInset = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + HEADER_CONTENT_HEIGHT
         val bottomInset = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding() +
-            NAV_BAR_HEIGHT + NAV_BAR_VERTICAL_MARGIN * 2
+                NAV_BAR_HEIGHT + NAV_BAR_VERTICAL_MARGIN * 2
 
         Box(modifier = Modifier.fillMaxSize()) {
             when (selectedMainTab) {
                 0 -> HomeScreenContent(
+                    session = session,
                     record = record,
                     onRecordChanged = onRecordChanged,
                     onDateSelected = onDateSelected,
@@ -115,10 +118,12 @@ fun MainContainerScreen(
                     bottomInset = bottomInset
                 )
                 4 -> SettingsScreen(
+                    session = session,
                     currentOpacity = navBarOpacity,
                     currentThemeMode = themeMode,
                     onOpacityChanged = onOpacityChanged,
                     onThemeModeChanged = onThemeModeChanged,
+                    onLogout = onLogout,
                     topInset = topInset,
                     bottomInset = bottomInset
                 )
@@ -254,6 +259,7 @@ private fun NHFuelBottomNav(
         Triple("Finance", Icons.Default.AccountBalanceWallet, 3),
         Triple("Setting", Icons.Default.Settings, 4)
     )
+
     val shape = RoundedCornerShape(28.dp)
 
     Box(
@@ -358,6 +364,7 @@ internal fun Modifier.cleanGlassBackground(tint: Color, opacity: Float): Modifie
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreenContent(
+    session: AppUserSession,
     record: DailyFuelRecord,
     onRecordChanged: (DailyFuelRecord) -> Unit,
     onDateSelected: (String) -> Unit,
@@ -370,6 +377,12 @@ fun HomeScreenContent(
     var showTestingInputRow by remember { mutableStateOf(false) }
     var showSaveTestingConfirmDialog by remember { mutableStateOf(false) }
     var showUndoTestingDialog by remember { mutableStateOf(false) }
+
+    val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+    val isPastDate = record.date < todayStr
+
+    // ENFORCE PAST DATE EDIT PRIVILEGE
+    val canEditDate = !isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER
 
     LaunchedEffect(record.date) {
         selectedShiftTab = 1
@@ -395,6 +408,28 @@ fun HomeScreenContent(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
+
+        // PAST DATE READ-ONLY WARNING BANNER
+        if (!canEditDate) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "Read-Only Mode: You do not have permission to edit past date entries ($record.date).",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer
+                    )
+                }
+            }
+        }
 
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -460,11 +495,10 @@ fun HomeScreenContent(
                 lastRefill = record.lastPetrolRefill,
                 lastVariationAmount = record.lastPetrolVariationAmount,
                 lastVariationTime = record.lastPetrolVariationTime,
+                canEdit = canEditDate,
                 onConfirmExactStock = { confirmedVal, diff ->
                     val clampedVal = max(0.0, confirmedVal)
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
-                    
-                    // Fixed: Only treat as absolute initial setup if starting stock was truly zero
                     val isFirstEntry = record.petrolTotal == 0.0 && record.lastPetrolDipAmount == 0.0
 
                     if (isFirstEntry) {
@@ -546,11 +580,10 @@ fun HomeScreenContent(
                 lastRefill = record.lastDieselRefill,
                 lastVariationAmount = record.lastDieselVariationAmount,
                 lastVariationTime = record.lastDieselVariationTime,
+                canEdit = canEditDate,
                 onConfirmExactStock = { confirmedVal, diff ->
                     val clampedVal = max(0.0, confirmedVal)
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
-                    
-                    // Fixed: Only treat as absolute initial setup if starting stock was truly zero
                     val isFirstEntry = record.dieselTotal == 0.0 && record.lastDieselDipAmount == 0.0
 
                     if (isFirstEntry) {
@@ -646,7 +679,7 @@ fun HomeScreenContent(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    if (activeShift.totalPetrolTesting > 0.0 || activeShift.totalDieselTesting > 0.0) {
+                    if ((activeShift.totalPetrolTesting > 0.0 || activeShift.totalDieselTesting > 0.0) && canEditDate) {
                         IconButton(
                             onClick = { showUndoTestingDialog = true },
                             modifier = Modifier.size(28.dp)
@@ -662,7 +695,8 @@ fun HomeScreenContent(
 
                     Switch(
                         checked = showTestingInputRow,
-                        onCheckedChange = { showTestingInputRow = it },
+                        onCheckedChange = { if (canEditDate) showTestingInputRow = it },
+                        enabled = canEditDate,
                         modifier = Modifier.height(24.dp)
                     )
                 }
@@ -690,13 +724,13 @@ fun HomeScreenContent(
                 selected = selectedShiftTab == 2,
                 enabled = record.shift1.isComplete,
                 onClick = { if (record.shift1.isComplete) selectedShiftTab = 2 },
-                text = { Text(if (record.shift1.isComplete) "Shift 2" else "Shift 2  ") }
+                text = { Text(if (record.shift1.isComplete) "Shift 2" else "Shift 2  🔒") }
             )
             Tab(
                 selected = selectedShiftTab == 3,
                 enabled = record.shift2.isComplete,
                 onClick = { if (record.shift2.isComplete) selectedShiftTab = 3 },
-                text = { Text(if (record.shift2.isComplete) "Shift 3" else "Shift 3  ") }
+                text = { Text(if (record.shift2.isComplete) "Shift 3" else "Shift 3  🔒") }
             )
         }
 
@@ -707,7 +741,9 @@ fun HomeScreenContent(
             petrolColor = petrolColor,
             dieselColor = dieselColor,
             showTestingFields = showTestingInputRow,
+            canEdit = canEditDate,
             onShiftUpdated = { updatedShift ->
+                if (!canEditDate) return@ShiftInputBlock
                 val newRecord = when (selectedShiftTab) {
                     1 -> {
                         val s2Mpd1P2 = if (updatedShift.mpd1.petrolN2.isClosed) updatedShift.mpd1.petrolN2.close else record.shift2.mpd1.petrolN2.open
@@ -769,7 +805,7 @@ fun HomeScreenContent(
             }
         )
 
-        if (showTestingInputRow) {
+        if (showTestingInputRow && canEditDate) {
             Button(
                 onClick = { showSaveTestingConfirmDialog = true },
                 modifier = Modifier
@@ -796,6 +832,7 @@ fun HomeScreenContent(
                     fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurface
                 )
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -805,6 +842,7 @@ fun HomeScreenContent(
                         Text("  Petrol: ${record.shift1.petrolSale} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
                         Text("  Diesel: ${record.shift1.dieselSale} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
                     }
+
                     if (record.shift1.isComplete || record.shift2.petrolSale > 0.0 || record.shift2.dieselSale > 0.0) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Shift 2", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -812,6 +850,7 @@ fun HomeScreenContent(
                             Text("  Diesel: ${record.shift2.dieselSale} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
                         }
                     }
+
                     if (record.shift2.isComplete || record.shift3.petrolSale > 0.0 || record.shift3.dieselSale > 0.0) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Shift 3", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
@@ -820,14 +859,16 @@ fun HomeScreenContent(
                         }
                     }
                 }
+
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
+
                 Text("Total 24H Full Day Net Sales (Shift 1 + 2 + 3):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text("  Total Petrol Net Sold: ${record.totalPetrolSell} Litre (Testing: ${record.totalPetrolTesting} L)", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 12.sp)
                 Text("  Total Diesel Net Sold: ${record.totalDieselSell} Litre (Testing: ${record.totalDieselTesting} L)", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 12.sp)
             }
         }
 
-        if (record.shift3.isComplete) {
+        if (record.shift3.isComplete && canEditDate) {
             Button(
                 onClick = { showSaveFullDayDialog = true },
                 modifier = Modifier
@@ -904,7 +945,6 @@ fun HomeScreenContent(
                             dieselN4 = activeShift.mpd2.dieselN4.copy(testing = 0.0)
                         )
                         val resetShift = activeShift.copy(mpd1 = resetMpd1, mpd2 = resetMpd2)
-
                         val updatedRecord = when (selectedShiftTab) {
                             1 -> record.copy(shift1 = resetShift)
                             2 -> record.copy(shift2 = resetShift)
@@ -948,7 +988,7 @@ fun HomeScreenContent(
                 Button(
                     onClick = {
                         showSaveFullDayDialog = false
-                        
+
                         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
                         val parsedDate = try { sdf.parse(record.date) } catch (e: Exception) { Date() }
                         val cal = Calendar.getInstance().apply {
@@ -1017,16 +1057,6 @@ fun HomeScreenContent(
 }
 
 @Composable
-fun PlaceholderTab(title: String) {
-    Box(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f))
-    }
-}
-
-@Composable
 fun FuelTankCard(
     modifier: Modifier = Modifier,
     title: String,
@@ -1041,6 +1071,7 @@ fun FuelTankCard(
     lastRefill: RefillEvent,
     lastVariationAmount: Double,
     lastVariationTime: String,
+    canEdit: Boolean = true,
     onConfirmExactStock: (Double, Double) -> Unit,
     onUndoExactStock: () -> Unit,
     onAddRefill: (Double) -> Unit,
@@ -1064,6 +1095,7 @@ fun FuelTankCard(
 
             Column {
                 Text("Exact Stock:", fontWeight = FontWeight.Bold, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+
                 if (!isEditingExactStock) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
@@ -1077,16 +1109,18 @@ fun FuelTankCard(
                             fontSize = 18.sp
                         )
                         Spacer(Modifier.width(4.dp))
-                        IconButton(
-                            onClick = { isEditingExactStock = true },
-                            modifier = Modifier.size(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Edit,
-                                contentDescription = "Edit Dip",
-                                tint = MaterialTheme.colorScheme.primary,
-                                modifier = Modifier.size(15.dp)
-                            )
+                        if (canEdit) {
+                            IconButton(
+                                onClick = { isEditingExactStock = true },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Edit,
+                                    contentDescription = "Edit Dip",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
                         }
                     }
                 } else {
@@ -1105,10 +1139,7 @@ fun FuelTankCard(
                             label = { Text("Enter Dip", fontSize = 8.sp) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
-                            colors = OutlinedTextFieldDefaults.colors(
-                                focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                            ),
+                            enabled = canEdit,
                             modifier = Modifier.weight(1f)
                         )
                         IconButton(
@@ -1118,6 +1149,7 @@ fun FuelTankCard(
                                     showConfirmationDialog = true
                                 }
                             },
+                            enabled = canEdit,
                             modifier = Modifier.size(32.dp)
                         ) {
                             Icon(
@@ -1141,7 +1173,7 @@ fun FuelTankCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
                     )
-                    if (lastDipTime.isNotBlank()) {
+                    if (lastDipTime.isNotBlank() && canEdit) {
                         IconButton(
                             onClick = { showUndoDipDialog = true },
                             modifier = Modifier.size(20.dp)
@@ -1166,6 +1198,7 @@ fun FuelTankCard(
                     label = { Text("Add Refill (+)", fontSize = 8.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    enabled = canEdit,
                     modifier = Modifier.weight(1f)
                 )
                 Button(
@@ -1176,9 +1209,11 @@ fun FuelTankCard(
                             newRefillInput = ""
                         }
                     },
+                    enabled = canEdit,
                     contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                 ) { Text("+", fontSize = 12.sp) }
             }
+
             Text("Total Refilled: $cumulativeRefill L", fontSize = 10.sp, color = stockColor)
 
             Row(
@@ -1194,7 +1229,7 @@ fun FuelTankCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                if (lastRefill.timestamp.isNotBlank()) {
+                if (lastRefill.timestamp.isNotBlank() && canEdit) {
                     IconButton(
                         onClick = { showUndoRefillDialog = true },
                         modifier = Modifier.size(24.dp)
@@ -1216,6 +1251,7 @@ fun FuelTankCard(
                 fontSize = 10.sp,
                 color = if (cumulativeVariation < 0.0) Color(0xFFFF5252) else stockColor
             )
+
             Column {
                 Text("Last Variation:", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(
@@ -1251,7 +1287,6 @@ fun FuelTankCard(
                     Text("Entered Dip Reading: $targetVal Litres", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
                     Text("Expected Current Stock: $currentStorage Litres", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
-
                     if (diff > 0.0) {
                         Text(
                             text = "Variation Detected: +$diff Litres (surplus)",
@@ -1267,23 +1302,8 @@ fun FuelTankCard(
                             fontSize = 12.sp
                         )
                     } else {
-                        Text(
-                            text = "No change detected in tank storage.",
-                            fontSize = 12.sp
-                        )
+                        Text("No change detected in tank storage.", fontSize = 12.sp)
                     }
-
-                    Text(
-                        text = "This is recorded as a Variation only — it is not treated as a Refill.",
-                        fontSize = 10.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = "Current & Exact Stock will be synced to $targetVal Litres.",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
                 }
             },
             confirmButton = {
@@ -1363,15 +1383,16 @@ fun ShiftInputBlock(
     petrolColor: Color,
     dieselColor: Color,
     showTestingFields: Boolean = false,
+    canEdit: Boolean = true,
     onShiftUpdated: (DayShift) -> Unit
 ) {
     var showSkipWarningDialog by remember { mutableStateOf(false) }
     var countdown by remember { mutableStateOf(5) }
 
     val hasCloseValueEntered = shift.mpd1.petrolN2.close > 0.0 || shift.mpd1.petrolN3.close > 0.0 ||
-        shift.mpd1.dieselN1.close > 0.0 || shift.mpd1.dieselN4.close > 0.0 ||
-        shift.mpd2.petrolN2.close > 0.0 || shift.mpd2.petrolN3.close > 0.0 ||
-        shift.mpd2.dieselN1.close > 0.0 || shift.mpd2.dieselN4.close > 0.0
+            shift.mpd1.dieselN1.close > 0.0 || shift.mpd1.dieselN4.close > 0.0 ||
+            shift.mpd2.petrolN2.close > 0.0 || shift.mpd2.petrolN3.close > 0.0 ||
+            shift.mpd2.dieselN1.close > 0.0 || shift.mpd2.dieselN4.close > 0.0
 
     LaunchedEffect(showSkipWarningDialog) {
         if (showSkipWarningDialog) {
@@ -1396,7 +1417,7 @@ fun ShiftInputBlock(
                 color = MaterialTheme.colorScheme.onBackground
             )
 
-            if (!hasCloseValueEntered && !shift.isComplete) {
+            if (!hasCloseValueEntered && !shift.isComplete && canEdit) {
                 OutlinedButton(
                     onClick = { showSkipWarningDialog = true },
                     contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
@@ -1419,10 +1440,11 @@ fun ShiftInputBlock(
             }
         }
 
-        DispenserShiftCard("MPD 1", shift.mpd1, petrolColor, dieselColor, showTestingFields) { updatedMpd1 ->
+        DispenserShiftCard("MPD 1", shift.mpd1, petrolColor, dieselColor, showTestingFields, canEdit) { updatedMpd1 ->
             onShiftUpdated(shift.copy(mpd1 = updatedMpd1))
         }
-        DispenserShiftCard("MPD 2", shift.mpd2, petrolColor, dieselColor, showTestingFields) { updatedMpd2 ->
+
+        DispenserShiftCard("MPD 2", shift.mpd2, petrolColor, dieselColor, showTestingFields, canEdit) { updatedMpd2 ->
             onShiftUpdated(shift.copy(mpd2 = updatedMpd2))
         }
     }
@@ -1439,16 +1461,7 @@ fun ShiftInputBlock(
             },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(
-                        text = "This action is used for zero-sales shifts due to holidays or pump closure.",
-                        fontSize = 12.sp,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Text(
-                        text = "• All nozzle CLOSE meter readings will be set equal to OPEN readings.\n• Total fuel sales for Shift $shiftNumber will evaluate to 0 Litres.",
-                        fontSize = 11.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Text("This action is used for zero-sales shifts due to holidays or pump closure.", fontSize = 12.sp)
                 }
             },
             confirmButton = {
@@ -1456,7 +1469,6 @@ fun ShiftInputBlock(
                     enabled = countdown == 0,
                     onClick = {
                         showSkipWarningDialog = false
-
                         val skippedMpd1 = shift.mpd1.copy(
                             petrolN2 = shift.mpd1.petrolN2.copy(close = shift.mpd1.petrolN2.open),
                             petrolN3 = shift.mpd1.petrolN3.copy(close = shift.mpd1.petrolN3.open),
@@ -1469,25 +1481,14 @@ fun ShiftInputBlock(
                             dieselN1 = shift.mpd2.dieselN1.copy(close = shift.mpd2.dieselN1.open),
                             dieselN4 = shift.mpd2.dieselN4.copy(close = shift.mpd2.dieselN4.open)
                         )
-
-                        onShiftUpdated(
-                            shift.copy(
-                                mpd1 = skippedMpd1,
-                                mpd2 = skippedMpd2
-                            )
-                        )
+                        onShiftUpdated(shift.copy(mpd1 = skippedMpd1, mpd2 = skippedMpd2))
                     }
                 ) {
-                    Text(
-                        text = if (countdown > 0) "Confirm ($countdown s)" else "Confirm Skip",
-                        fontWeight = FontWeight.Bold
-                    )
+                    Text(if (countdown > 0) "Confirm ($countdown s)" else "Confirm Skip", fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showSkipWarningDialog = false }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { showSkipWarningDialog = false }) { Text("Cancel") }
             }
         )
     }
@@ -1500,6 +1501,7 @@ fun DispenserShiftCard(
     petrolColor: Color,
     dieselColor: Color,
     showTestingFields: Boolean = false,
+    canEdit: Boolean = true,
     onUpdate: (DispenserShift) -> Unit
 ) {
     Card(
@@ -1510,16 +1512,18 @@ fun DispenserShiftCard(
     ) {
         Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(dispenserTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Petrol (N2, N3)", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 11.sp)
-                    NozzleRow("N2", dispenser.petrolN2, showTestingFields) { updated -> onUpdate(dispenser.copy(petrolN2 = updated)) }
-                    NozzleRow("N3", dispenser.petrolN3, showTestingFields) { updated -> onUpdate(dispenser.copy(petrolN3 = updated)) }
+                    NozzleRow("N2", dispenser.petrolN2, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(petrolN2 = updated)) }
+                    NozzleRow("N3", dispenser.petrolN3, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(petrolN3 = updated)) }
                 }
+
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Diesel (N1, N4)", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 11.sp)
-                    NozzleRow("N1", dispenser.dieselN1, showTestingFields) { updated -> onUpdate(dispenser.copy(dieselN1 = updated)) }
-                    NozzleRow("N4", dispenser.dieselN4, showTestingFields) { updated -> onUpdate(dispenser.copy(dieselN4 = updated)) }
+                    NozzleRow("N1", dispenser.dieselN1, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(dieselN1 = updated)) }
+                    NozzleRow("N4", dispenser.dieselN4, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(dieselN4 = updated)) }
                 }
             }
         }
@@ -1531,6 +1535,7 @@ fun NozzleRow(
     nozzleLabel: String,
     nozzle: NozzleShift,
     showTestingField: Boolean = false,
+    canEdit: Boolean = true,
     onChange: (NozzleShift) -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 2.dp)) {
@@ -1540,8 +1545,8 @@ fun NozzleRow(
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
-            NumberField("Open", nozzle.open, openValue = nozzle.open, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(open = it)) }
-            NumberField("Close", nozzle.close, openValue = nozzle.open, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(close = it)) }
+            NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(open = it)) }
+            NumberField("Close", nozzle.close, openValue = nozzle.open, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(close = it)) }
         }
 
         if (nozzle.testing > 0.0 && !showTestingField) {
@@ -1561,7 +1566,7 @@ fun NozzleRow(
                 modifier = Modifier.padding(top = 2.dp)
             ) {
                 Text("Test L", fontSize = 8.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                NumberField("Testing L", nozzle.testing, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(testing = it)) }
+                NumberField("Testing L", nozzle.testing, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(testing = it)) }
             }
         }
     }
@@ -1572,6 +1577,7 @@ fun NumberField(
     label: String,
     value: Double,
     openValue: Double = 0.0,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier,
     onValueChange: (Double) -> Unit
 ) {
@@ -1583,7 +1589,7 @@ fun NumberField(
     OutlinedTextField(
         value = textValue,
         onValueChange = { input ->
-            if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+            if (enabled && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                 textValue = input
                 val parsed = input.toDoubleOrNull() ?: 0.0
                 onValueChange(parsed)
@@ -1592,10 +1598,13 @@ fun NumberField(
         label = { Text(label, fontSize = 8.sp) },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
+        enabled = enabled,
         isError = isInvalidClose,
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = MaterialTheme.colorScheme.onSurface,
             unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            disabledTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+            disabledLabelColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             focusedBorderColor = if (isInvalidClose) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
             unfocusedBorderColor = if (isInvalidClose) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline
         ),

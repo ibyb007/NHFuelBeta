@@ -67,9 +67,6 @@ fun SalesScreen(
     val isPastDate = currentRecord.date < todayStr
     val isDayFinalized = currentRecord.shift3.isComplete
 
-    // STRICT UNAMBIGUOUS PERMISSION EVALUATION:
-    // Admins, Super Admins, and Owners can ALWAYS edit.
-    // Managers are blocked if: isReadOnly is true, OR it's an unpermitted past date, OR the day is finalized.
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
     val canEdit = if (isAdminOrOwner) {
@@ -84,11 +81,12 @@ fun SalesScreen(
     var fromDateInput by remember { mutableStateOf(currentRecord.date) }
     var toDateInput by remember { mutableStateOf(currentRecord.date) }
 
-    var petrolPriceText by remember(currentRecord.date) {
-        mutableStateOf(if (currentRecord.petrolPrice == 0.0) "" else currentRecord.petrolPrice.toString())
+    // Persistent rate input states
+    var petrolPriceText by remember(currentRecord.date, currentRecord.petrolPrice) {
+        mutableStateOf(if (currentRecord.petrolPrice == 0.0) "" else if (currentRecord.petrolPrice % 1.0 == 0.0) currentRecord.petrolPrice.toLong().toString() else currentRecord.petrolPrice.toString())
     }
-    var dieselPriceText by remember(currentRecord.date) {
-        mutableStateOf(if (currentRecord.dieselPrice == 0.0) "" else currentRecord.dieselPrice.toString())
+    var dieselPriceText by remember(currentRecord.date, currentRecord.dieselPrice) {
+        mutableStateOf(if (currentRecord.dieselPrice == 0.0) "" else if (currentRecord.dieselPrice % 1.0 == 0.0) currentRecord.dieselPrice.toLong().toString() else currentRecord.dieselPrice.toString())
     }
 
     val filteredRecords = remember(selectedPeriod, currentRecord, fromDateInput, toDateInput, allRecords) {
@@ -184,7 +182,7 @@ fun SalesScreen(
                     Text(
                         text = when {
                             session.isReadOnly -> "Read-Only Mode: Sales entries are locked."
-                            isDayFinalized -> "Day Finalized: Sales entries for ${currentRecord.date} are locked and sealed."
+                            isDayFinalized -> "Day Finalized: Sales entries for ${currentRecord.date} are locked for Managers."
                             else -> "Past Date Locked: You do not have permission to edit past sales data (${currentRecord.date})."
                         },
                         fontSize = 11.sp,

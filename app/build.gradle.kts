@@ -10,7 +10,7 @@ plugins {
 // MANUALLY EDIT THIS STRING WHENEVER YOU WANT A NEW VERSION
 // (e.g. "1.0", "1.0.1", "1.1", "2.0")
 // --------------------------------------------------------------------------
-val appVersionName = "1.8.9"
+val appVersionName = "1.9.0"
 
 // versionCode is an integer for Android internal updates.
 // Passed via -PversionCode from CI, or defaults to 1 for local builds.

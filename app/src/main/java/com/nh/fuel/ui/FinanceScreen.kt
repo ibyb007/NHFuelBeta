@@ -4,8 +4,6 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -35,7 +33,6 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.nh.fuel.data.*
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -54,6 +51,7 @@ data class InternalLogEntry(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FinanceScreen(
+    session: AppUserSession,
     currentRecordDate: String,
     allExpenses: List<ExpenseItem> = emptyList(),
     allCredits: List<CreditRecord> = emptyList(),
@@ -72,6 +70,7 @@ fun FinanceScreen(
     if (selectedCustomerForDetail != null) {
         val currentCustomer = allCredits.find { it.id == selectedCustomerForDetail?.id } ?: selectedCustomerForDetail!!
         CustomerLedgerDetailScreen(
+            session = session,
             customer = currentCustomer,
             allRecords = allRecords,
             currentRecordDate = currentRecordDate,
@@ -123,14 +122,17 @@ fun FinanceScreen(
 
             when (selectedSubTab) {
                 0 -> ExpendScreenContent(
+                    session = session,
                     currentRecordDate = currentRecordDate,
                     allExpenses = allExpenses,
+                    allRecords = allRecords,
                     onAddOrUpdateExpense = onAddOrUpdateExpense,
                     onDeleteExpense = onDeleteExpense,
                     onDateSelected = onDateSelected,
                     bottomInset = bottomInset
                 )
                 1 -> CreditLedgerContent(
+                    session = session,
                     currentRecordDate = currentRecordDate,
                     allCredits = allCredits,
                     allRecords = allRecords,
@@ -147,8 +149,10 @@ fun FinanceScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExpendScreenContent(
+    session: AppUserSession,
     currentRecordDate: String,
     allExpenses: List<ExpenseItem>,
+    allRecords: List<DailyFuelRecord>,
     onAddOrUpdateExpense: (ExpenseItem) -> Unit,
     onDeleteExpense: (ExpenseItem) -> Unit,
     onDateSelected: (String) -> Unit,
@@ -163,6 +167,16 @@ fun ExpendScreenContent(
     var selectedAggFilter by remember { mutableStateOf(ExpensePeriodFilter.ALL_TIME) }
     var customFromDate by remember { mutableStateOf(currentRecordDate) }
     var customToDate by remember { mutableStateOf(currentRecordDate) }
+
+    val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+    val isPastDate = expenseDateInput < todayStr
+    val isDayFinalized = allRecords.find { it.date == expenseDateInput }?.shift3?.isComplete == true
+
+    // STRICT EDITING PERMISSION:
+    // Blocked if Read-Only OR Unpermitted Past Date OR Finalized Day for Managers
+    val canEdit = !session.isReadOnly &&
+            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
+            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
 
     val dayExpenses = remember(allExpenses, expenseDateInput) {
         allExpenses.filter { it.date == expenseDateInput }
@@ -201,6 +215,33 @@ fun ExpendScreenContent(
         verticalArrangement = Arrangement.spacedBy(10.dp),
         contentPadding = PaddingValues(bottom = bottomInset + 12.dp)
     ) {
+        if (!canEdit) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = when {
+                                session.isReadOnly -> "Read-Only Mode: Data entry is restricted."
+                                isDayFinalized -> "Day Finalized: Expenses for $expenseDateInput are locked and sealed."
+                                else -> "Past Date Locked: You do not have permission to add or edit expenses for past dates ($expenseDateInput)."
+                            },
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer
+                        )
+                    }
+                }
+            }
+        }
+
         item {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -222,6 +263,7 @@ fun ExpendScreenContent(
                         onValueChange = { descriptionInput = it },
                         label = { Text("Expense Description * (e.g. Tea/Snacks, Generator Repair)", fontSize = 11.sp) },
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.fillMaxWidth()
                     )
 
@@ -235,6 +277,7 @@ fun ExpendScreenContent(
                             label = { Text("Amount (₹)", fontSize = 11.sp) },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
+                            enabled = canEdit,
                             modifier = Modifier.weight(1f)
                         )
 
@@ -262,12 +305,12 @@ fun ExpendScreenContent(
                     Button(
                         onClick = {
                             val amount = amountInput.toDoubleOrNull() ?: 0.0
-                            if (descriptionInput.isNotBlank() && amount > 0.0) {
+                            if (descriptionInput.isNotBlank() && amount > 0.0 && canEdit) {
                                 val targetDate = expenseDateInput.ifBlank { currentRecordDate }
                                 val nowTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
                                 onAddOrUpdateExpense(
                                     ExpenseItem(
-                                        id = System.currentTimeMillis(), // Ensures unique document ID for Firestore
+                                        id = System.currentTimeMillis(),
                                         date = targetDate,
                                         description = descriptionInput.trim(),
                                         amount = amount,
@@ -278,6 +321,7 @@ fun ExpendScreenContent(
                                 amountInput = ""
                             }
                         },
+                        enabled = canEdit,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(42.dp),
@@ -390,6 +434,7 @@ fun ExpendScreenContent(
         items(dayExpenses, key = { it.id }) { item ->
             ExpenseCardBlock(
                 item = item,
+                canEdit = canEdit,
                 onEdit = { editingExpense = item },
                 onDelete = { onDeleteExpense(item) }
             )
@@ -424,7 +469,9 @@ fun ExpendScreenContent(
             expense = expense,
             onDismiss = { editingExpense = null },
             onSave = { updatedExpense ->
-                onAddOrUpdateExpense(updatedExpense)
+                if (canEdit) {
+                    onAddOrUpdateExpense(updatedExpense)
+                }
                 editingExpense = null
             }
         )
@@ -434,6 +481,7 @@ fun ExpendScreenContent(
 @Composable
 private fun ExpenseCardBlock(
     item: ExpenseItem,
+    canEdit: Boolean = true,
     onEdit: () -> Unit,
     onDelete: () -> Unit
 ) {
@@ -477,28 +525,30 @@ private fun ExpenseCardBlock(
                     color = MaterialTheme.colorScheme.error
                 )
 
-                IconButton(
-                    onClick = onEdit,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Edit,
-                        contentDescription = "Edit Expense",
-                        tint = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.size(16.dp)
-                    )
-                }
+                if (canEdit) {
+                    IconButton(
+                        onClick = onEdit,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Edit,
+                            contentDescription = "Edit Expense",
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
 
-                IconButton(
-                    onClick = { showDeleteConfirm = true },
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Delete,
-                        contentDescription = "Delete Expense",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(16.dp)
-                    )
+                    IconButton(
+                        onClick = { showDeleteConfirm = true },
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Delete,
+                            contentDescription = "Delete Expense",
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
         }
@@ -603,6 +653,7 @@ private fun EditExpenseDetailsDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CreditLedgerContent(
+    session: AppUserSession,
     currentRecordDate: String,
     allCredits: List<CreditRecord>,
     allRecords: List<DailyFuelRecord>,
@@ -618,6 +669,8 @@ private fun CreditLedgerContent(
     var isAddingNewDueToUser by remember { mutableStateOf(false) }
     var creditToSettle by remember { mutableStateOf<CreditRecord?>(null) }
     var editingCustomerInfoCredit by remember { mutableStateOf<CreditRecord?>(null) }
+
+    val canEdit = !session.isReadOnly
 
     val totalOutstanding = remember(allCredits) {
         allCredits.sumOf { it.remainingBalance }
@@ -696,18 +749,20 @@ private fun CreditLedgerContent(
                 )
             }
 
-            Button(
-                onClick = { 
-                    prefilledCustomerCredit = null
-                    isAddingNewDueToUser = false
-                    showAddCreditDialog = true 
-                },
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                modifier = Modifier.height(32.dp)
-            ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("New Credit Entry", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+            if (canEdit) {
+                Button(
+                    onClick = { 
+                        prefilledCustomerCredit = null
+                        isAddingNewDueToUser = false
+                        showAddCreditDialog = true 
+                    },
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                    modifier = Modifier.height(32.dp)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("New Credit Entry", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
@@ -721,6 +776,7 @@ private fun CreditLedgerContent(
             items(filteredCredits, key = { it.id }) { credit ->
                 RestoredCreditCardItem(
                     credit = credit,
+                    canEdit = canEdit,
                     onOpenDetail = { onCustomerSelected(credit) },
                     onAddNewDue = {
                         prefilledCustomerCredit = credit
@@ -735,8 +791,9 @@ private fun CreditLedgerContent(
         }
     }
 
-    if (showAddCreditDialog) {
+    if (showAddCreditDialog && canEdit) {
         AddEditCreditDialog(
+            session = session,
             currentRecordDate = currentRecordDate,
             initialCredit = prefilledCustomerCredit,
             isAddingNewDue = isAddingNewDueToUser,
@@ -750,31 +807,36 @@ private fun CreditLedgerContent(
     }
 
     editingCustomerInfoCredit?.let { credit ->
-        EditCustomerInfoDialog(
-            credit = credit,
-            onDismiss = { editingCustomerInfoCredit = null },
-            onSave = { updatedCredit ->
-                onAddOrUpdateCredit(updatedCredit)
-                editingCustomerInfoCredit = null
-            }
-        )
+        if (canEdit) {
+            EditCustomerInfoDialog(
+                credit = credit,
+                onDismiss = { editingCustomerInfoCredit = null },
+                onSave = { updatedCredit ->
+                    onAddOrUpdateCredit(updatedCredit)
+                    editingCustomerInfoCredit = null
+                }
+            )
+        }
     }
 
     creditToSettle?.let { credit ->
-        SettleCreditDialog(
-            credit = credit,
-            onDismiss = { creditToSettle = null },
-            onConfirmSettlement = { updatedCredit ->
-                onAddOrUpdateCredit(updatedCredit)
-                creditToSettle = null
-            }
-        )
+        if (canEdit) {
+            SettleCreditDialog(
+                credit = credit,
+                onDismiss = { creditToSettle = null },
+                onConfirmSettlement = { updatedCredit ->
+                    onAddOrUpdateCredit(updatedCredit)
+                    creditToSettle = null
+                }
+            )
+        }
     }
 }
 
 @Composable
 private fun RestoredCreditCardItem(
     credit: CreditRecord,
+    canEdit: Boolean = true,
     onOpenDetail: () -> Unit,
     onAddNewDue: () -> Unit,
     onEditCustomerInfo: () -> Unit,
@@ -853,40 +915,42 @@ private fun RestoredCreditCardItem(
                 }
             }
 
-            HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
+            if (canEdit) {
+                HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp))
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Delete, contentDescription = "Delete Credit Record", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
-                    }
-                    IconButton(onClick = onEditCustomerInfo, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Edit, contentDescription = "Edit Customer Profile Info", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
-                    }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    OutlinedButton(
-                        onClick = onAddNewDue,
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                        modifier = Modifier.height(28.dp)
-                    ) {
-                        Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
-                        Spacer(Modifier.width(2.dp))
-                        Text("Add New Due", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Delete, contentDescription = "Delete Credit Record", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(16.dp))
+                        }
+                        IconButton(onClick = onEditCustomerInfo, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Edit, contentDescription = "Edit Customer Profile Info", tint = MaterialTheme.colorScheme.onSurface, modifier = Modifier.size(16.dp))
+                        }
                     }
 
-                    if (credit.remainingBalance > 0.0) {
-                        Button(
-                            onClick = onSettle,
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        OutlinedButton(
+                            onClick = onAddNewDue,
                             contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
                             modifier = Modifier.height(28.dp)
                         ) {
-                            Text("Record Payment", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(12.dp))
+                            Spacer(Modifier.width(2.dp))
+                            Text("Add New Due", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+
+                        if (credit.remainingBalance > 0.0) {
+                            Button(
+                                onClick = onSettle,
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                                modifier = Modifier.height(28.dp)
+                            ) {
+                                Text("Record Payment", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -915,6 +979,7 @@ private fun RestoredCreditCardItem(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun CustomerLedgerDetailScreen(
+    session: AppUserSession,
     customer: CreditRecord,
     allRecords: List<DailyFuelRecord>,
     currentRecordDate: String,
@@ -930,6 +995,8 @@ private fun CustomerLedgerDetailScreen(
     var showDeleteConfirmDialog by remember { mutableStateOf(false) }
     var showEditCustomerDialog by remember { mutableStateOf(false) }
     var editingLogEntry by remember { mutableStateOf<InternalLogEntry?>(null) }
+
+    val canEdit = !session.isReadOnly
 
     // Parse text log into structured UI items for table display
     val parsedLogs = remember(customer.notes, customer.date, customer.totalAmountDue, customer.amountPaid) {
@@ -993,7 +1060,6 @@ private fun CustomerLedgerDetailScreen(
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
-        // Top Navigation Header
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
@@ -1029,17 +1095,18 @@ private fun CustomerLedgerDetailScreen(
                     )
                 }
 
-                IconButton(onClick = { showEditCustomerDialog = true }) {
-                    Icon(Icons.Default.Edit, contentDescription = "Edit Customer Info")
-                }
+                if (canEdit) {
+                    IconButton(onClick = { showEditCustomerDialog = true }) {
+                        Icon(Icons.Default.Edit, contentDescription = "Edit Customer Info")
+                    }
 
-                IconButton(onClick = { showDeleteConfirmDialog = true }) {
-                    Icon(Icons.Default.Delete, contentDescription = "Delete Customer", tint = MaterialTheme.colorScheme.error)
+                    IconButton(onClick = { showDeleteConfirmDialog = true }) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete Customer", tint = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }
 
-        // Customer Info Summary Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -1089,35 +1156,35 @@ private fun CustomerLedgerDetailScreen(
             }
         }
 
-        // Action Buttons Row
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { showAddDueDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
-                modifier = Modifier.weight(1f)
+        if (canEdit) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Add New Due", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-            }
+                Button(
+                    onClick = { showAddDueDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFC62828)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Add New Due", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
 
-            Button(
-                onClick = { showRecordPaymentDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
-                modifier = Modifier.weight(1f)
-            ) {
-                Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Record Payment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                Button(
+                    onClick = { showRecordPaymentDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32)),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.Payments, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text("Record Payment", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                }
             }
         }
 
-        // Clean Summary Section
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -1153,7 +1220,6 @@ private fun CustomerLedgerDetailScreen(
         Spacer(Modifier.height(8.dp))
         Text("Detailed Log Entries", fontWeight = FontWeight.Bold, fontSize = 14.sp)
 
-        // Structured Table View for Detailed Log Entries matching Reference Design
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -1161,7 +1227,6 @@ private fun CustomerLedgerDetailScreen(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.fillMaxSize()) {
-                // Table Header Row
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -1173,12 +1238,13 @@ private fun CustomerLedgerDetailScreen(
                     Text("Date", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
                     Text("Timestamp", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.2f))
                     Text("Amount & Type", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1.3f))
-                    Text("Actions", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(52.dp))
+                    if (canEdit) {
+                        Text("Actions", fontSize = 10.sp, fontWeight = FontWeight.Bold, modifier = Modifier.width(52.dp))
+                    }
                 }
 
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-                // Table Items List
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1193,7 +1259,6 @@ private fun CustomerLedgerDetailScreen(
                                 .padding(vertical = 6.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            // 1. Entry Type Pill
                             Box(modifier = Modifier.weight(1.3f)) {
                                 Surface(
                                     color = if (log.isPayment) Color(0xFFE8F5E9) else Color(0xFFFFEBEE),
@@ -1209,14 +1274,12 @@ private fun CustomerLedgerDetailScreen(
                                 }
                             }
 
-                            // 2. Date
                             Text(
                                 text = log.date,
                                 fontSize = 9.sp,
                                 modifier = Modifier.weight(1f)
                             )
 
-                            // 3. Timestamp
                             Text(
                                 text = log.timestamp,
                                 fontSize = 8.sp,
@@ -1224,7 +1287,6 @@ private fun CustomerLedgerDetailScreen(
                                 modifier = Modifier.weight(1.2f)
                             )
 
-                            // 4. Amount & Type
                             Column(modifier = Modifier.weight(1.3f)) {
                                 Text(
                                     text = "₹ ${String.format(Locale.getDefault(), "%.0f", log.amount)}",
@@ -1239,32 +1301,33 @@ private fun CustomerLedgerDetailScreen(
                                 )
                             }
 
-                            // 5. Actions (Edit / Delete)
-                            Row(
-                                modifier = Modifier.width(52.dp),
-                                horizontalArrangement = Arrangement.spacedBy(2.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                IconButton(
-                                    onClick = { editingLogEntry = log },
-                                    modifier = Modifier.size(22.dp)
+                            if (canEdit) {
+                                Row(
+                                    modifier = Modifier.width(52.dp),
+                                    horizontalArrangement = Arrangement.spacedBy(2.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(13.dp))
-                                }
+                                    IconButton(
+                                        onClick = { editingLogEntry = log },
+                                        modifier = Modifier.size(22.dp)
+                                    ) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(13.dp))
+                                    }
 
-                                IconButton(
-                                    onClick = {
-                                        val newLogList = parsedLogs.filter { it.id != log.id }
-                                        val recomputedNotes = newLogList.joinToString("\n") {
-                                            "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
-                                        }
-                                        val newPaid = newLogList.filter { it.isPayment }.sumOf { it.amount }
-                                        val newTotalDue = newLogList.filter { !it.isPayment }.sumOf { it.amount }
-                                        onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
-                                    },
-                                    modifier = Modifier.size(22.dp)
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(13.dp))
+                                    IconButton(
+                                        onClick = {
+                                            val newLogList = parsedLogs.filter { it.id != log.id }
+                                            val recomputedNotes = newLogList.joinToString("\n") {
+                                                "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
+                                            }
+                                            val newPaid = newLogList.filter { it.isPayment }.sumOf { it.amount }
+                                            val newTotalDue = newLogList.filter { !it.isPayment }.sumOf { it.amount }
+                                            onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
+                                        },
+                                        modifier = Modifier.size(22.dp)
+                                    ) {
+                                        Icon(Icons.Default.Delete, contentDescription = "Delete", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(13.dp))
+                                    }
                                 }
                             }
                         }
@@ -1275,8 +1338,9 @@ private fun CustomerLedgerDetailScreen(
         }
     }
 
-    if (showAddDueDialog) {
+    if (showAddDueDialog && canEdit) {
         AddEditCreditDialog(
+            session = session,
             currentRecordDate = currentRecordDate,
             initialCredit = customer,
             isAddingNewDue = true,
@@ -1289,7 +1353,7 @@ private fun CustomerLedgerDetailScreen(
         )
     }
 
-    if (showRecordPaymentDialog) {
+    if (showRecordPaymentDialog && canEdit) {
         SettleCreditDialog(
             credit = customer,
             onDismiss = { showRecordPaymentDialog = false },
@@ -1300,7 +1364,7 @@ private fun CustomerLedgerDetailScreen(
         )
     }
 
-    if (editingLogEntry != null) {
+    if (editingLogEntry != null && canEdit) {
         val entry = editingLogEntry!!
         EditLogEntryModal(
             entry = entry,
@@ -1320,7 +1384,7 @@ private fun CustomerLedgerDetailScreen(
         )
     }
 
-    if (showEditCustomerDialog) {
+    if (showEditCustomerDialog && canEdit) {
         EditCustomerInfoDialog(
             credit = customer,
             onDismiss = { showEditCustomerDialog = false },
@@ -1331,7 +1395,7 @@ private fun CustomerLedgerDetailScreen(
         )
     }
 
-    if (showDeleteConfirmDialog) {
+    if (showDeleteConfirmDialog && canEdit) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirmDialog = false },
             title = { Text("Delete Customer Record?", fontWeight = FontWeight.Bold) },
@@ -1484,6 +1548,7 @@ private fun EditCustomerInfoDialog(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AddEditCreditDialog(
+    session: AppUserSession,
     currentRecordDate: String,
     initialCredit: CreditRecord? = null,
     isEditing: Boolean = false,
@@ -1504,6 +1569,14 @@ private fun AddEditCreditDialog(
 
     var showEntryDatePicker by remember { mutableStateOf(false) }
     var isCalculatingInternal by remember { mutableStateOf(false) }
+
+    val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
+    val isPastDate = entryDate < todayStr
+    val isDayFinalized = allRecords.find { it.date == entryDate }?.shift3?.isComplete == true
+
+    val canEdit = !session.isReadOnly &&
+            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
+            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
 
     val fuelRates = remember(entryDate, allRecords) {
         val exactRecord = allRecords.find { it.date == entryDate }
@@ -1544,6 +1617,15 @@ private fun AddEditCreditDialog(
                     fontSize = 16.sp
                 )
 
+                if (!canEdit) {
+                    Text(
+                        text = if (isDayFinalized) "Day Finalized: Dues for $entryDate are locked." else "Past Date Locked: You do not have permission to log dues for past dates.",
+                        fontSize = 10.sp,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -1561,6 +1643,7 @@ private fun AddEditCreditDialog(
                         onValueChange = { vehicleNo = it },
                         label = { Text("Vehicle No. (e.g. WB26A1234)", fontSize = 10.sp) },
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
@@ -1568,6 +1651,7 @@ private fun AddEditCreditDialog(
                         onValueChange = { customerName = it },
                         label = { Text("Customer Name", fontSize = 10.sp) },
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
@@ -1576,14 +1660,15 @@ private fun AddEditCreditDialog(
                         label = { Text("Mobile Number", fontSize = 10.sp) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    FilterChip(selected = selectedFuelType == CreditFuelType.PETROL, onClick = { selectedFuelType = CreditFuelType.PETROL }, label = { Text("Petrol (₹ $petrolRate/L)", fontSize = 9.sp) })
-                    FilterChip(selected = selectedFuelType == CreditFuelType.DIESEL, onClick = { selectedFuelType = CreditFuelType.DIESEL }, label = { Text("Diesel (₹ $dieselRate/L)", fontSize = 9.sp) })
-                    FilterChip(selected = selectedFuelType == CreditFuelType.BOTH, onClick = { selectedFuelType = CreditFuelType.BOTH }, label = { Text("Both", fontSize = 9.sp) })
+                    FilterChip(selected = selectedFuelType == CreditFuelType.PETROL, onClick = { if (canEdit) selectedFuelType = CreditFuelType.PETROL }, label = { Text("Petrol (₹ $petrolRate/L)", fontSize = 9.sp) }, enabled = canEdit)
+                    FilterChip(selected = selectedFuelType == CreditFuelType.DIESEL, onClick = { if (canEdit) selectedFuelType = CreditFuelType.DIESEL }, label = { Text("Diesel (₹ $dieselRate/L)", fontSize = 9.sp) }, enabled = canEdit)
+                    FilterChip(selected = selectedFuelType == CreditFuelType.BOTH, onClick = { if (canEdit) selectedFuelType = CreditFuelType.BOTH }, label = { Text("Both", fontSize = 9.sp) }, enabled = canEdit)
                 }
 
                 if (selectedFuelType == CreditFuelType.PETROL || selectedFuelType == CreditFuelType.BOTH) {
@@ -1591,7 +1676,7 @@ private fun AddEditCreditDialog(
                         value = petrolLitreText,
                         onValueChange = { input ->
                             petrolLitreText = input
-                            if (!isCalculatingInternal) {
+                            if (!isCalculatingInternal && canEdit) {
                                 isCalculatingInternal = true
                                 val litres = input.toDoubleOrNull() ?: 0.0
                                 val calculated = litres * petrolRate
@@ -1602,6 +1687,7 @@ private fun AddEditCreditDialog(
                         label = { Text("Petrol Litres (L)", fontSize = 10.sp) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1611,7 +1697,7 @@ private fun AddEditCreditDialog(
                         value = dieselLitreText,
                         onValueChange = { input ->
                             dieselLitreText = input
-                            if (!isCalculatingInternal) {
+                            if (!isCalculatingInternal && canEdit) {
                                 isCalculatingInternal = true
                                 val litres = input.toDoubleOrNull() ?: 0.0
                                 val calculated = litres * dieselRate
@@ -1622,6 +1708,7 @@ private fun AddEditCreditDialog(
                         label = { Text("Diesel Litres (L)", fontSize = 10.sp) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         singleLine = true,
+                        enabled = canEdit,
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
@@ -1630,7 +1717,7 @@ private fun AddEditCreditDialog(
                     value = addedAmountText,
                     onValueChange = { input ->
                         addedAmountText = input
-                        if (!isCalculatingInternal) {
+                        if (!isCalculatingInternal && canEdit) {
                             isCalculatingInternal = true
                             val amount = input.toDoubleOrNull() ?: 0.0
                             when (selectedFuelType) {
@@ -1650,6 +1737,7 @@ private fun AddEditCreditDialog(
                     label = { Text(if (isAddingNewDue) "New Due Amount (₹)" else "Total Amount Due (₹)", fontSize = 10.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
+                    enabled = canEdit,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -1659,38 +1747,41 @@ private fun AddEditCreditDialog(
                 ) {
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
-                    Button(onClick = {
-                        val enteredDue = addedAmountText.toDoubleOrNull() ?: 0.0
-                        if (enteredDue > 0.0) {
-                            val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
-                            val record = if (isAddingNewDue && initialCredit != null) {
-                                val newNoteLog = buildString {
-                                    if (initialCredit.notes.isNotBlank()) append("${initialCredit.notes}\n")
-                                    append("• New Due Added: ₹ $enteredDue on $entryDate @ $nowStr")
+                    Button(
+                        onClick = {
+                            val enteredDue = addedAmountText.toDoubleOrNull() ?: 0.0
+                            if (enteredDue > 0.0 && canEdit) {
+                                val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
+                                val record = if (isAddingNewDue && initialCredit != null) {
+                                    val newNoteLog = buildString {
+                                        if (initialCredit.notes.isNotBlank()) append("${initialCredit.notes}\n")
+                                        append("• New Due Added: ₹ $enteredDue on $entryDate @ $nowStr")
+                                    }
+                                    initialCredit.copy(
+                                        date = entryDate,
+                                        petrolQuantityLitre = initialCredit.petrolQuantityLitre + (petrolLitreText.toDoubleOrNull() ?: 0.0),
+                                        dieselQuantityLitre = initialCredit.dieselQuantityLitre + (dieselLitreText.toDoubleOrNull() ?: 0.0),
+                                        totalAmountDue = initialCredit.totalAmountDue + enteredDue,
+                                        notes = newNoteLog
+                                    )
+                                } else {
+                                    (initialCredit ?: CreditRecord(id = System.currentTimeMillis(), date = entryDate)).copy(
+                                        id = initialCredit?.id ?: System.currentTimeMillis(),
+                                        date = entryDate,
+                                        vehicleNumber = vehicleNo.trim(),
+                                        customerName = customerName.trim(),
+                                        mobileNumber = mobileNo.trim(),
+                                        fuelType = selectedFuelType,
+                                        petrolQuantityLitre = petrolLitreText.toDoubleOrNull() ?: 0.0,
+                                        dieselQuantityLitre = dieselLitreText.toDoubleOrNull() ?: 0.0,
+                                        totalAmountDue = enteredDue
+                                    )
                                 }
-                                initialCredit.copy(
-                                    date = entryDate,
-                                    petrolQuantityLitre = initialCredit.petrolQuantityLitre + (petrolLitreText.toDoubleOrNull() ?: 0.0),
-                                    dieselQuantityLitre = initialCredit.dieselQuantityLitre + (dieselLitreText.toDoubleOrNull() ?: 0.0),
-                                    totalAmountDue = initialCredit.totalAmountDue + enteredDue,
-                                    notes = newNoteLog
-                                )
-                            } else {
-                                (initialCredit ?: CreditRecord(id = System.currentTimeMillis(), date = entryDate)).copy(
-                                    id = initialCredit?.id ?: System.currentTimeMillis(), // Ensures unique ID for new credit customer
-                                    date = entryDate,
-                                    vehicleNumber = vehicleNo.trim(),
-                                    customerName = customerName.trim(),
-                                    mobileNumber = mobileNo.trim(),
-                                    fuelType = selectedFuelType,
-                                    petrolQuantityLitre = petrolLitreText.toDoubleOrNull() ?: 0.0,
-                                    dieselQuantityLitre = dieselLitreText.toDoubleOrNull() ?: 0.0,
-                                    totalAmountDue = enteredDue
-                                )
+                                onSave(record)
                             }
-                            onSave(record)
-                        }
-                    }) { Text("Save Entry", fontWeight = FontWeight.Bold) }
+                        },
+                        enabled = canEdit
+                    ) { Text("Save Entry", fontWeight = FontWeight.Bold) }
                 }
             }
         }

@@ -1,7 +1,16 @@
-# Firebase & ML Kit ProGuard Rules
+# Firebase & Firestore Rules
 -keep class com.google.firebase.** { *; }
--keep class com.google.mlkit.** { *; }
--keep class com.google.android.gms.** { *; }
+-keep class com.google.firestore.** { *; }
 
-# Keep Room entities and Converters
+# Google Play Services & Identity / Credential Manager
+-keep class com.google.android.gms.** { *; }
+-keep class com.google.android.libraries.identity.** { *; }
+-keep class androidx.credentials.** { *; }
+
+# ML Kit Barcode Scanner & CameraX
+-keep class com.google.mlkit.** { *; }
+-keep class com.google.android.gms.internal.mlkit_vision_barcode.** { *; }
+-keep class androidx.camera.** { *; }
+
+# Room Entities & Data Converters
 -keep class com.nh.fuel.data.** { *; }

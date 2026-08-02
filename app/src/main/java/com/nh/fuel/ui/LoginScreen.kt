@@ -307,23 +307,32 @@ private fun verifyAccessCode(
     onSuccess: (AppUserSession) -> Unit,
     onError: (String) -> Unit
 ) {
-    val cleanCode = code.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+    // Strip hyphens and non-alphanumeric characters
+    val cleanInputCode = code.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
     val db = FirebaseFirestore.getInstance()
 
     db.collection("access_keys")
-        .whereEqualTo("accessCode", cleanCode)
         .get()
         .addOnSuccessListener { query ->
-            if (!query.isEmpty) {
-                val doc = query.documents.first()
-                val staffKey = doc.toObject(StaffAccessKey::class.java)
+            var foundKey: StaffAccessKey? = null
 
-                if (staffKey != null && staffKey.status == KeyStatus.ACTIVE) {
+            for (doc in query.documents) {
+                val keyObj = doc.toObject(StaffAccessKey::class.java)
+                val rawDocCode = keyObj?.accessCode?.replace(Regex("[^A-Za-z0-9]"), "")?.uppercase() ?: ""
+                
+                if (rawDocCode == cleanInputCode) {
+                    foundKey = keyObj
+                    break
+                }
+            }
+
+            if (foundKey != null) {
+                if (foundKey.status == KeyStatus.ACTIVE) {
                     val session = AppUserSession(
-                        emailOrKey = staffKey.accessCode,
-                        displayName = staffKey.nickname,
-                        role = staffKey.role,
-                        canEditPastDates = staffKey.canEditPastDates,
+                        emailOrKey = foundKey.accessCode,
+                        displayName = foundKey.nickname,
+                        role = foundKey.role,
+                        canEditPastDates = foundKey.canEditPastDates,
                         isOwnerLogin = false
                     )
                     onSuccess(session)

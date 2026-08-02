@@ -14,6 +14,7 @@ object UserSessionManager {
     private val KEY_DISPLAY_NAME = stringPreferencesKey("display_name")
     private val KEY_ROLE = stringPreferencesKey("role")
     private val KEY_CAN_EDIT_PAST = booleanPreferencesKey("can_edit_past")
+    private val KEY_IS_READ_ONLY = booleanPreferencesKey("is_read_only")
     private val KEY_IS_OWNER = booleanPreferencesKey("is_owner")
     private val KEY_IS_LOGGED_IN = booleanPreferencesKey("is_logged_in")
 
@@ -23,6 +24,7 @@ object UserSessionManager {
             prefs[KEY_DISPLAY_NAME] = session.displayName
             prefs[KEY_ROLE] = session.role.name
             prefs[KEY_CAN_EDIT_PAST] = session.canEditPastDates
+            prefs[KEY_IS_READ_ONLY] = session.isReadOnly
             prefs[KEY_IS_OWNER] = session.isOwnerLogin
             prefs[KEY_IS_LOGGED_IN] = true
         }
@@ -37,15 +39,17 @@ object UserSessionManager {
         val displayName = prefs[KEY_DISPLAY_NAME] ?: "User"
         val roleStr = prefs[KEY_ROLE] ?: Role.MANAGER.name
         val canEditPast = prefs[KEY_CAN_EDIT_PAST] ?: false
+        val isReadOnly = prefs[KEY_IS_READ_ONLY] ?: false
         val isOwner = prefs[KEY_IS_OWNER] ?: false
 
-        val role = try { Role.valueOf(roleStr) } catch (e: Exception) { Role.MANAGER } // FIXED: fallback to MANAGER
+        val role = try { Role.valueOf(roleStr) } catch (e: Exception) { Role.MANAGER }
 
         return AppUserSession(
             emailOrKey = emailOrKey,
             displayName = displayName,
             role = role,
             canEditPastDates = canEditPast,
+            isReadOnly = isReadOnly,
             isOwnerLogin = isOwner
         )
     }

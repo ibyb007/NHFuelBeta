@@ -384,13 +384,16 @@ fun HomeScreenContent(
     val isPastDate = record.date < todayStr
     val isDayFinalized = record.shift3.isComplete
 
-    // STRICT PERMISSION EVALUATION:
-    // 1. Cannot edit if Read-Only Mode is active
-    // 2. Cannot edit past dates without explicit permission
-    // 3. CANNOT EDIT FINALIZED DAYS unless Super Admin or Owner
-    val canEditDate = !session.isReadOnly &&
-            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
-            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
+    // STRICT UNAMBIGUOUS PERMISSION EVALUATION:
+    // Admins, Super Admins, and Owners can ALWAYS edit.
+    // Managers are blocked if: isReadOnly is true, OR it's an unpermitted past date, OR the day is finalized.
+    val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+
+    val canEditDate = if (isAdminOrOwner) {
+        true
+    } else {
+        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+    }
 
     LaunchedEffect(record.date) {
         selectedShiftTab = 1
@@ -433,7 +436,7 @@ fun HomeScreenContent(
                         text = when {
                             session.isReadOnly -> "Read-Only Mode: Data entry is restricted."
                             isDayFinalized -> "Day Finalized: Full Day entries for ${record.date} are locked and sealed."
-                            else -> "Past Date Locked: You do not have permission to edit past entries ($record.date)."
+                            else -> "Past Date Locked: You do not have permission to edit past entries (${record.date})."
                         },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,

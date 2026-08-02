@@ -47,7 +47,7 @@ fun SettingsScreen(
     var sliderValue by remember(currentOpacity) { mutableFloatStateOf(currentOpacity) }
     var showStaffManagementPage by remember { mutableStateOf(false) }
 
-    val canAccessAdminPanel = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.`ADMIN`
+    val canAccessAdminPanel = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
     if (showStaffManagementPage && canAccessAdminPanel) {
         StaffManagementScreen(
@@ -109,7 +109,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Staff Access & Roles Navigation Card (Only shows Generate Code / Tap to open)
+                // Staff Access & Roles Navigation Card
                 if (canAccessAdminPanel) {
                     Card(
                         modifier = Modifier
@@ -221,7 +221,7 @@ private fun StaffManagementScreen(
     LaunchedEffect(Unit) {
         val db = FirebaseFirestore.getInstance()
         db.collection("access_keys")
-            .addSnapshotListener { snapshot, error ->
+            .addSnapshotListener { snapshot, _ ->
                 isLoadingKeys = false
                 if (snapshot != null) {
                     staffKeyList = snapshot.documents.mapNotNull { it.toObject(StaffAccessKey::class.java) }
@@ -431,9 +431,9 @@ private fun StaffKeyRowItem(
                 Text("Role Permission", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
 
                 FilterChip(
-                    selected = keyItem.role == Role.`ADMIN`,
+                    selected = keyItem.role == Role.ADMIN,
                     onClick = {
-                        val nextRole = if (keyItem.role == Role.`ADMIN`) Role.MANAGER else Role.`ADMIN`
+                        val nextRole = if (keyItem.role == Role.ADMIN) Role.MANAGER else Role.ADMIN
                         onUpdateKey(keyItem.copy(role = nextRole))
                     },
                     label = { Text(keyItem.role.name, fontSize = 10.sp, fontWeight = FontWeight.Bold) },
@@ -503,8 +503,8 @@ private fun GenerateStaffKeyModal(
                         label = { Text("Manager", fontSize = 10.sp) }
                     )
                     FilterChip(
-                        selected = selectedRole == Role.`ADMIN`,
-                        onClick = { selectedRole = Role.`ADMIN` },
+                        selected = selectedRole == Role.ADMIN,
+                        onClick = { selectedRole = Role.ADMIN },
                         label = { Text("Admin", fontSize = 10.sp) }
                     )
                 }

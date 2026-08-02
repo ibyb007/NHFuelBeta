@@ -8,7 +8,7 @@ import kotlinx.coroutines.flow.callbackFlow
 class FirestoreRepository {
     private val db = FirebaseFirestore.getInstance()
 
-    // 1. Real-time Daily Fuel Records Listener
+    // 1. Daily Fuel Records
     fun observeAllFuelRecords(): Flow<List<DailyFuelRecord>> = callbackFlow {
         val listener = db.collection("daily_fuel_records")
             .addSnapshotListener { snapshot, error ->
@@ -30,7 +30,7 @@ class FirestoreRepository {
             .set(record)
     }
 
-    // 2. Real-time Expenses Listener
+    // 2. Expenses
     fun observeAllExpenses(): Flow<List<ExpenseItem>> = callbackFlow {
         val listener = db.collection("expenses")
             .addSnapshotListener { snapshot, error ->
@@ -48,17 +48,17 @@ class FirestoreRepository {
 
     suspend fun saveExpense(expense: ExpenseItem) {
         db.collection("expenses")
-            .document(expense.id)
+            .document(expense.id.toString()) // FIXED: converted Long to String
             .set(expense)
     }
 
     suspend fun deleteExpense(expense: ExpenseItem) {
         db.collection("expenses")
-            .document(expense.id)
+            .document(expense.id.toString()) // FIXED: converted Long to String
             .delete()
     }
 
-    // 3. Real-time Credits Listener
+    // 3. Credits
     fun observeAllCredits(): Flow<List<CreditRecord>> = callbackFlow {
         val listener = db.collection("credits")
             .addSnapshotListener { snapshot, error ->
@@ -76,13 +76,13 @@ class FirestoreRepository {
 
     suspend fun saveCredit(credit: CreditRecord) {
         db.collection("credits")
-            .document(credit.id)
+            .document(credit.id.toString()) // FIXED: converted Long to String
             .set(credit)
     }
 
     suspend fun deleteCredit(credit: CreditRecord) {
         db.collection("credits")
-            .document(credit.id)
+            .document(credit.id.toString()) // FIXED: converted Long to String
             .delete()
     }
 }

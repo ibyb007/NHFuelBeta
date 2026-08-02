@@ -71,25 +71,23 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val firestoreRepository = remember { FirestoreRepository() }
 
-                // Session State Management & Auto-Login Restorer
                 var currentSession by remember { mutableStateOf<AppUserSession?>(null) }
                 var isCheckingSession by remember { mutableStateOf(true) }
 
-                // Check for existing saved session on cold start
                 LaunchedEffect(Unit) {
                     currentSession = UserSessionManager.getSavedSession(context)
                     isCheckingSession = false
                 }
 
-                // --- REAL-TIME ACCESS KEY REVOCATION & PERMISSION SYNCHRONIZER ---
-                LaunchedEffect(currentSession) {
+                // --- REAL-TIME ACCESS KEY & PRIVILEGE SYNCHRONIZER ---
+                LaunchedEffect(currentSession?.emailOrKey) {
                     val session = currentSession ?: return@LaunchedEffect
                     if (!session.isOwnerLogin) {
                         val db = FirebaseFirestore.getInstance()
                         val cleanCode = session.emailOrKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
 
                         db.collection("access_keys")
-                            .addSnapshotListener { snapshot, error ->
+                            .addSnapshotListener { snapshot, _ ->
                                 if (snapshot != null) {
                                     val matchingDoc = snapshot.documents.find { doc ->
                                         val keyObj = doc.toObject(StaffAccessKey::class.java)
@@ -97,25 +95,20 @@ class MainActivity : ComponentActivity() {
                                     }
                                     val keyObj = matchingDoc?.toObject(StaffAccessKey::class.java)
 
-                                    // Kick out immediately if key is deleted or revoked by Admin
                                     if (matchingDoc == null || keyObj?.status != KeyStatus.ACTIVE) {
                                         coroutineScope.launch {
                                             UserSessionManager.clearSession(context)
                                             currentSession = null
                                         }
                                     } else {
-                                        // Live-sync updates (Read-only, Past-date edit, Role, Name)
-                                        if (keyObj.canEditPastDates != session.canEditPastDates ||
-                                            keyObj.role != session.role ||
-                                            keyObj.isReadOnly != session.isReadOnly ||
-                                            keyObj.nickname != session.displayName
-                                        ) {
-                                            val updatedSession = session.copy(
-                                                canEditPastDates = keyObj.canEditPastDates,
-                                                role = keyObj.role,
-                                                isReadOnly = keyObj.isReadOnly,
-                                                displayName = keyObj.nickname
-                                            )
+                                        // Instantly sync changes to role, read-only mode, and past date access
+                                        val updatedSession = session.copy(
+                                            canEditPastDates = keyObj.canEditPastDates,
+                                            role = keyObj.role,
+                                            isReadOnly = keyObj.isReadOnly,
+                                            displayName = keyObj.nickname
+                                        )
+                                        if (updatedSession != currentSession) {
                                             currentSession = updatedSession
                                             coroutineScope.launch {
                                                 UserSessionManager.saveSession(context, updatedSession)
@@ -146,7 +139,6 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val activeSession = currentSession!!
 
-                    // --- REALTIME FIRESTORE MULTI-DEVICE SYNC ---
                     val allRecordsFlow = firestoreRepository.observeAllFuelRecords().collectAsState(initial = emptyList())
                     val allRecords = allRecordsFlow.value
 
@@ -156,14 +148,12 @@ class MainActivity : ComponentActivity() {
                     val allCreditsFlow = firestoreRepository.observeAllCredits().collectAsState(initial = emptyList())
                     val allCredits = allCreditsFlow.value
 
-                    // Default active date to today or latest existing record
                     var activeBusinessDate by remember {
                         mutableStateOf(
                             SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                         )
                     }
 
-                    // Keep activeBusinessDate anchored on existing unfinalized record if present
                     LaunchedEffect(allRecords) {
                         if (allRecords.isNotEmpty()) {
                             val unfinalizedRecord = allRecords.sortedBy { it.date }.find { !it.shift3.isComplete }
@@ -178,7 +168,6 @@ class MainActivity : ComponentActivity() {
 
                     val dbRecord = allRecords.find { it.date == activeBusinessDate }
 
-                    // Active business record state management
                     val currentRecord = remember(dbRecord, activeBusinessDate, allRecords) {
                         if (dbRecord != null) {
                             dbRecord

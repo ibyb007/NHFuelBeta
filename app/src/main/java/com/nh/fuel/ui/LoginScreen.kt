@@ -225,7 +225,7 @@ fun LoginScreen(
                                 val credential = result.credential
 
                                 if (credential is androidx.credentials.CustomCredential &&
-                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_KEY
+                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
                                 ) {
                                     val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                                     val googleToken = googleIdTokenCredential.idToken

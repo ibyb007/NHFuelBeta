@@ -20,10 +20,15 @@ android {
         targetSdk = 34
         versionCode = vCode
         versionName = vName
-
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
             useSupportLibrary = true
+        }
+
+        // Restrict native libraries (.so) strictly to arm64-v8a
+        ndk {
+            abiFilters.clear()
+            abiFilters.add("arm64-v8a")
         }
 
         // Read MASTER_OWNER_EMAILS from environment variable (GitHub Secret in CI) or local property fallback
@@ -45,7 +50,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true     // R8 code obfuscation & shrinking
+            isShrinkResources = true   // Remove unused drawables & layouts
             signingConfig = signingConfigs.getByName("release")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -53,20 +59,25 @@ android {
             )
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
     kotlinOptions {
         jvmTarget = "17"
     }
+
     buildFeatures {
         compose = true
-        buildConfig = true // Enabled to access BuildConfig.MASTER_OWNER_EMAILS
+        buildConfig = true
     }
+
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
+
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -102,15 +113,13 @@ dependencies {
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
 
-    // Jetpack DataStore Preferences (For Bottom Navigation Bar Opacity)
+    // Jetpack DataStore Preferences
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
-    // Google Play Services & Google Drive API Client Dependencies
+    // Google Play Services & Google Drive API Client
     implementation("com.google.android.gms:play-services-auth:20.7.0")
     implementation("com.google.api-client:google-api-client-android:2.2.0")
     implementation("com.google.apis:google-api-services-drive:v3-rev20230822-2.0.0")
-
-    // --- NEW ADDITIONS FOR AUTH & CLOUD SYNC ---
 
     // Firebase BOM, Auth & Firestore
     implementation(platform("com.google.firebase:firebase-bom:33.1.2"))

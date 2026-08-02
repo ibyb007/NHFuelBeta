@@ -5,9 +5,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "user_session")
 
@@ -36,12 +34,12 @@ object UserSessionManager {
         if (!isLoggedIn) return null
 
         val emailOrKey = prefs[KEY_EMAIL_OR_KEY] ?: return null
-        val displayName = prefs[KEY_DISPLAY_NAME] ?: "Staff"
-        val roleStr = prefs[KEY_ROLE] ?: Role.STAFF.name
+        val displayName = prefs[KEY_DISPLAY_NAME] ?: "User"
+        val roleStr = prefs[KEY_ROLE] ?: Role.MANAGER.name
         val canEditPast = prefs[KEY_CAN_EDIT_PAST] ?: false
         val isOwner = prefs[KEY_IS_OWNER] ?: false
 
-        val role = try { Role.valueOf(roleStr) } catch (e: Exception) { Role.STAFF }
+        val role = try { Role.valueOf(roleStr) } catch (e: Exception) { Role.MANAGER } // FIXED: fallback to MANAGER
 
         return AppUserSession(
             emailOrKey = emailOrKey,

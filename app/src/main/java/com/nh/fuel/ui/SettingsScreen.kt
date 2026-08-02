@@ -119,18 +119,24 @@ fun SettingsScreen(
                         Text("No staff access codes generated yet. Tap 'Generate Code' above.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         LazyColumn(
-                            verticalArrangement = Arrangement.spacedBy(6.dp),
-                            modifier = Modifier.heightIn(max = 280.dp)
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.heightIn(max = 340.dp)
                         ) {
                             items(staffKeyList, key = { it.id }) { keyItem ->
                                 StaffKeyRowItem(
                                     keyItem = keyItem,
                                     onShowQr = { selectedQrKey = keyItem },
-                                    onToggleStatus = { updatedKey ->
+                                    onUpdateKey = { updatedKey ->
                                         FirebaseFirestore.getInstance()
                                             .collection("access_keys")
                                             .document(updatedKey.id)
                                             .set(updatedKey)
+                                    },
+                                    onDeleteKey = { keyId ->
+                                        FirebaseFirestore.getInstance()
+                                            .collection("access_keys")
+                                            .document(keyId)
+                                            .delete()
                                     }
                                 )
                             }
@@ -231,44 +237,130 @@ fun SettingsScreen(
 private fun StaffKeyRowItem(
     keyItem: StaffAccessKey,
     onShowQr: () -> Unit,
-    onToggleStatus: (StaffAccessKey) -> Unit
+    onUpdateKey: (StaffAccessKey) -> Unit,
+    onDeleteKey: (String) -> Unit
 ) {
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(10.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(keyItem.nickname.ifBlank { "Staff Member" }, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                Text(
-                    text = "Code: ${keyItem.accessCode} | Role: ${keyItem.role.name}",
-                    fontSize = 10.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.ExtraBold
-                )
-                Text("Past Date Edit: ${if (keyItem.canEditPastDates) "ON" else "OFF"}", fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            // Header: Nickname & Primary Action Buttons
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(keyItem.nickname.ifBlank { "Staff Member" }, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(
+                        text = "Code: ${keyItem.accessCode}",
+                        fontSize = 11.sp,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                    IconButton(onClick = onShowQr, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.QrCode, contentDescription = "View QR", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.primary)
+                    }
+
+                    IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(28.dp)) {
+                        Icon(Icons.Default.Delete, contentDescription = "Delete Key", modifier = Modifier.size(18.dp), tint = MaterialTheme.colorScheme.error)
+                    }
+                }
             }
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                IconButton(onClick = onShowQr, modifier = Modifier.size(28.dp)) {
-                    Icon(Icons.Default.QrCode, contentDescription = "View QR", modifier = Modifier.size(16.dp))
-                }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+            // Row 1: Access Status Active Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (keyItem.status == KeyStatus.ACTIVE) "Status: ACTIVE" else "Status: REVOKED",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (keyItem.status == KeyStatus.ACTIVE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                )
 
                 Switch(
                     checked = keyItem.status == KeyStatus.ACTIVE,
                     onCheckedChange = { isActive ->
-                        onToggleStatus(keyItem.copy(status = if (isActive) KeyStatus.ACTIVE else KeyStatus.REVOKED))
+                        onUpdateKey(keyItem.copy(status = if (isActive) KeyStatus.ACTIVE else KeyStatus.REVOKED))
                     },
-                    modifier = Modifier.height(24.dp)
+                    modifier = Modifier.height(20.dp)
+                )
+            }
+
+            // Row 2: Privilege - Editing Past Dates Toggle
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Past Date Edit Privilege", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Switch(
+                    checked = keyItem.canEditPastDates,
+                    onCheckedChange = { canEdit ->
+                        onUpdateKey(keyItem.copy(canEditPastDates = canEdit))
+                    },
+                    modifier = Modifier.height(20.dp)
+                )
+            }
+
+            // Row 3: Privilege - Role Switcher (MANAGER / ADMIN)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("Role Permission", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+                FilterChip(
+                    selected = keyItem.role == Role.ADMIN,
+                    onClick = {
+                        val nextRole = if (keyItem.role == Role.ADMIN) Role.MANAGER else Role.ADMIN
+                        onUpdateKey(keyItem.copy(role = nextRole))
+                    },
+                    label = { Text(keyItem.role.name, fontSize = 10.sp, fontWeight = FontWeight.Bold) },
+                    modifier = Modifier.height(26.dp)
                 )
             }
         }
+    }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete & Revoke Key?", fontSize = 14.sp, fontWeight = FontWeight.Bold) },
+            text = { Text("Are you sure you want to delete '${keyItem.nickname}'? They will be logged out permanently.", fontSize = 12.sp) },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteConfirm = false
+                        onDeleteKey(keyItem.id)
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 }
 

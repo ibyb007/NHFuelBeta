@@ -211,9 +211,9 @@ fun LoginScreen(
 
                                 val credentialManager = CredentialManager.create(context)
 
-                                // Note: Replace with Web Client ID from Firebase Console -> Auth -> Sign-in Method -> Google if needed
                                 val googleIdOption = GetGoogleIdOption.Builder()
                                     .setFilterByAuthorizedAccounts(false)
+                                    .setServerClientId("954316338055-hdhb96jl5l7fg1bm2r855bf8skpdjdqv.apps.googleusercontent.com") // <--- PASTE YOUR WEB CLIENT ID HERE
                                     .setAutoSelectEnabled(false)
                                     .build()
 

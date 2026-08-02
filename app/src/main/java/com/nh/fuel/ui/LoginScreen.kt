@@ -213,7 +213,7 @@ fun LoginScreen(
 
                                 val googleIdOption = GetGoogleIdOption.Builder()
                                     .setFilterByAuthorizedAccounts(false)
-                                    .setServerClientId("954316338055-hdhb96jl5l7fg1bm2r855bf8skpdjdqv.apps.googleusercontent.com") // <--- PASTE YOUR WEB CLIENT ID HERE
+                                    .setServerClientId("YOUR_COPIED_CLIENT_ID.apps.googleusercontent.com") // Paste Web Client ID here
                                     .setAutoSelectEnabled(false)
                                     .build()
 
@@ -224,9 +224,7 @@ fun LoginScreen(
                                 val result = credentialManager.getCredential(context, request)
                                 val credential = result.credential
 
-                                if (credential is androidx.credentials.CustomCredential &&
-                                    credential.type == GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                                ) {
+                                if (credential is androidx.credentials.CustomCredential) {
                                     val googleIdTokenCredential = GoogleIdTokenCredential.createFrom(credential.data)
                                     val googleToken = googleIdTokenCredential.idToken
                                     val googleAuthCredential = GoogleAuthProvider.getCredential(googleToken, null)

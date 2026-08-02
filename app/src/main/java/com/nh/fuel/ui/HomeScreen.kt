@@ -88,6 +88,7 @@ fun MainContainerScreen(
                     bottomInset = bottomInset
                 )
                 1 -> SalesScreen(
+                    session = session,
                     currentRecord = record,
                     allRecords = allRecords,
                     allExpenses = allExpenses,
@@ -105,6 +106,7 @@ fun MainContainerScreen(
                     bottomInset = bottomInset
                 )
                 3 -> FinanceScreen(
+                    session = session,
                     currentRecordDate = record.date,
                     allExpenses = allExpenses,
                     allCredits = allCredits,
@@ -380,9 +382,15 @@ fun HomeScreenContent(
 
     val todayStr = remember { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date()) }
     val isPastDate = record.date < todayStr
+    val isDayFinalized = record.shift3.isComplete
 
-    // ENFORCE PAST DATE EDIT PRIVILEGE
-    val canEditDate = !isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER
+    // STRICT PERMISSION EVALUATION:
+    // 1. Cannot edit if Read-Only Mode is active
+    // 2. Cannot edit past dates without explicit permission
+    // 3. CANNOT EDIT FINALIZED DAYS unless Super Admin or Owner
+    val canEditDate = !session.isReadOnly &&
+            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
+            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
 
     LaunchedEffect(record.date) {
         selectedShiftTab = 1
@@ -409,7 +417,7 @@ fun HomeScreenContent(
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
-        // PAST DATE READ-ONLY WARNING BANNER
+        // WARNING BANNER FOR LOCKED / FINALIZED / READ-ONLY MODES
         if (!canEditDate) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -422,7 +430,11 @@ fun HomeScreenContent(
                     Icon(Icons.Default.Lock, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.width(8.dp))
                     Text(
-                        text = "Read-Only Mode: You do not have permission to edit past date entries ($record.date).",
+                        text = when {
+                            session.isReadOnly -> "Read-Only Mode: Data entry is restricted."
+                            isDayFinalized -> "Day Finalized: Full Day entries for ${record.date} are locked and sealed."
+                            else -> "Past Date Locked: You do not have permission to edit past entries ($record.date)."
+                        },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onErrorContainer
@@ -449,6 +461,15 @@ fun HomeScreenContent(
                     fontSize = 15.sp,
                     color = MaterialTheme.colorScheme.primary
                 )
+                if (isDayFinalized) {
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        text = "(FINALIZED)",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = Color(0xFF2E7D32)
+                    )
+                }
             }
             IconButton(onClick = { showDatePickerModal = true }) {
                 Icon(
@@ -497,6 +518,7 @@ fun HomeScreenContent(
                 lastVariationTime = record.lastPetrolVariationTime,
                 canEdit = canEditDate,
                 onConfirmExactStock = { confirmedVal, diff ->
+                    if (!canEditDate) return@FuelTankCard
                     val clampedVal = max(0.0, confirmedVal)
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                     val isFirstEntry = record.petrolTotal == 0.0 && record.lastPetrolDipAmount == 0.0
@@ -534,6 +556,7 @@ fun HomeScreenContent(
                     }
                 },
                 onUndoExactStock = {
+                    if (!canEditDate) return@FuelTankCard
                     onRecordChanged(
                         record.copy(
                             petrolVariation = record.petrolVariation - record.lastPetrolVariationAmount,
@@ -545,6 +568,7 @@ fun HomeScreenContent(
                     )
                 },
                 onAddRefill = { addedLitre ->
+                    if (!canEditDate) return@FuelTankCard
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                     val validAdded = max(0.0, addedLitre)
                     val newRefill = record.petrolRefill + validAdded
@@ -556,6 +580,7 @@ fun HomeScreenContent(
                     )
                 },
                 onUndoLastRefill = {
+                    if (!canEditDate) return@FuelTankCard
                     val lastAmount = record.lastPetrolRefill.amount
                     onRecordChanged(
                         record.copy(
@@ -582,6 +607,7 @@ fun HomeScreenContent(
                 lastVariationTime = record.lastDieselVariationTime,
                 canEdit = canEditDate,
                 onConfirmExactStock = { confirmedVal, diff ->
+                    if (!canEditDate) return@FuelTankCard
                     val clampedVal = max(0.0, confirmedVal)
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                     val isFirstEntry = record.dieselTotal == 0.0 && record.lastDieselDipAmount == 0.0
@@ -619,6 +645,7 @@ fun HomeScreenContent(
                     }
                 },
                 onUndoExactStock = {
+                    if (!canEditDate) return@FuelTankCard
                     onRecordChanged(
                         record.copy(
                             dieselVariation = record.dieselVariation - record.lastDieselVariationAmount,
@@ -630,6 +657,7 @@ fun HomeScreenContent(
                     )
                 },
                 onAddRefill = { addedLitre ->
+                    if (!canEditDate) return@FuelTankCard
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                     val validAdded = max(0.0, addedLitre)
                     val newRefill = record.dieselRefill + validAdded
@@ -641,6 +669,7 @@ fun HomeScreenContent(
                     )
                 },
                 onUndoLastRefill = {
+                    if (!canEditDate) return@FuelTankCard
                     val lastAmount = record.lastDieselRefill.amount
                     onRecordChanged(
                         record.copy(
@@ -868,7 +897,7 @@ fun HomeScreenContent(
             }
         }
 
-        if (record.shift3.isComplete && canEditDate) {
+        if (record.shift3.isComplete && canEditDate && !isDayFinalized) {
             Button(
                 onClick = { showSaveFullDayDialog = true },
                 modifier = Modifier
@@ -1132,7 +1161,7 @@ fun FuelTankCard(
                         OutlinedTextField(
                             value = pendingInput,
                             onValueChange = { input ->
-                                if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
                                     pendingInput = input
                                 }
                             },
@@ -1145,7 +1174,7 @@ fun FuelTankCard(
                         IconButton(
                             onClick = {
                                 val parsed = max(0.0, pendingInput.toDoubleOrNull() ?: 0.0)
-                                if (parsed >= 0.0) {
+                                if (parsed >= 0.0 && canEdit) {
                                     showConfirmationDialog = true
                                 }
                             },
@@ -1204,7 +1233,7 @@ fun FuelTankCard(
                 Button(
                     onClick = {
                         val added = newRefillInput.toDoubleOrNull() ?: 0.0
-                        if (added > 0.0) {
+                        if (added > 0.0 && canEdit) {
                             onAddRefill(added)
                             newRefillInput = ""
                         }

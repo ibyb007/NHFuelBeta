@@ -1908,19 +1908,19 @@ private fun sendWhatsAppReminder(context: Context, customer: CreditRecord) {
 --------------------------------
 Hello *${customer.customerName}*,
 
-This is a gentle reminder regarding your outstanding fuel credit balance.
+আপনার কাছে প্রাপ্য বকেয়া টাকার বিষয়ে এটি একটি বিনীত স্মরণিকা।
 
-📋 *Customer Details:*
-• *Name:* ${customer.customerName}
-• *Vehicle No:* ${customer.vehicleNumber.ifBlank { "N/A" }}
-• *Total Credit Issued:* ₹ ${String.format(Locale.getDefault(), "%.2f", customer.totalAmountDue)}
-• *Total Amount Paid:* ₹ ${String.format(Locale.getDefault(), "%.2f", customer.amountPaid)}
+📋 *গ্রাহকের বিবরণ:*
+• *নাম:* ${customer.customerName}
+• *গাড়ির নম্বর:* ${customer.vehicleNumber.ifBlank { "N/A" }}
+• *মোট বকেয়া:* ₹ ${String.format(Locale.getDefault(), "%.2f", customer.totalAmountDue)}
+• *মোট পেমেন্ট করা হয়েছে:* ₹ ${String.format(Locale.getDefault(), "%.2f", customer.amountPaid)}
 
-💰 *Current Net Balance Due: ₹ ${String.format(Locale.getDefault(), "%.2f", customer.remainingBalance)}*
+💰 *বর্তমানে বকেয়া রয়েছে: ₹ ${String.format(Locale.getDefault(), "%.2f", customer.remainingBalance)}*
 
-Kindly arrange to clear the pending dues at your earliest convenience.
+অনুগ্ৰহ করে আপনার সুবিধামতো যত দ্রুত সম্ভব বকেয়া পরিশোধের ব্যবস্থা করুন।
 
-Thank you!
+ধন্যবাদ!
 --------------------------------
 NH Fuel Station
     """.trimIndent()

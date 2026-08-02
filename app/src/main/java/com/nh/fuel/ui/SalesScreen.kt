@@ -67,11 +67,16 @@ fun SalesScreen(
     val isPastDate = currentRecord.date < todayStr
     val isDayFinalized = currentRecord.shift3.isComplete
 
-    // STRICT EDITING PERMISSION:
-    // Blocked if Read-Only OR Unpermitted Past Date OR Finalized Day for Managers
-    val canEdit = !session.isReadOnly &&
-            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
-            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
+    // STRICT UNAMBIGUOUS PERMISSION EVALUATION:
+    // Admins, Super Admins, and Owners can ALWAYS edit.
+    // Managers are blocked if: isReadOnly is true, OR it's an unpermitted past date, OR the day is finalized.
+    val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+
+    val canEdit = if (isAdminOrOwner) {
+        true
+    } else {
+        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+    }
 
     var selectedPeriod by remember { mutableStateOf(PeriodFilter.DAY) }
     var showDatePickerModal by remember { mutableStateOf(false) }

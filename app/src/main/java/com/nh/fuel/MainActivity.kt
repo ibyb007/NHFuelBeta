@@ -18,12 +18,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
-import androidx.room.Room
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
 import com.nh.fuel.data.DispenserShift
-import com.nh.fuel.data.FuelDatabase
+import com.nh.fuel.data.FirestoreRepository
 import com.nh.fuel.data.NozzleShift
 import com.nh.fuel.data.UserSessionManager
 import com.nh.fuel.ui.AppPreferences
@@ -36,7 +35,6 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : ComponentActivity() {
-    private lateinit var database: FuelDatabase
     private lateinit var appPreferences: AppPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,12 +43,6 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
-
-        database = Room.databaseBuilder(
-            applicationContext,
-            FuelDatabase::class.java,
-            "nh_fuel_db"
-        ).fallbackToDestructiveMigration().build()
 
         appPreferences = AppPreferences(applicationContext)
 
@@ -74,6 +66,7 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = colorScheme) {
                 val coroutineScope = rememberCoroutineScope()
                 val context = LocalContext.current
+                val firestoreRepository = remember { FirestoreRepository() }
 
                 // Session State Management & Auto-Login Restorer
                 var currentSession by remember { mutableStateOf<AppUserSession?>(null) }
@@ -102,8 +95,15 @@ class MainActivity : ComponentActivity() {
                         }
                     )
                 } else {
-                    val allRecordsFlow = database.fuelDao().getAllRecords().collectAsState(initial = emptyList())
+                    // --- REALTIME FIRESTORE MULTI-DEVICE SYNC ---
+                    val allRecordsFlow = firestoreRepository.observeAllFuelRecords().collectAsState(initial = emptyList())
                     val allRecords = allRecordsFlow.value
+
+                    val allExpensesFlow = firestoreRepository.observeAllExpenses().collectAsState(initial = emptyList())
+                    val allExpenses = allExpensesFlow.value
+
+                    val allCreditsFlow = firestoreRepository.observeAllCredits().collectAsState(initial = emptyList())
+                    val allCredits = allCreditsFlow.value
 
                     // Default active date to today or latest existing record
                     var activeBusinessDate by remember {
@@ -125,8 +125,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val recordFlow = database.fuelDao().getRecordByDate(activeBusinessDate).collectAsState(initial = null)
-                    val dbRecord = recordFlow.value
+                    val dbRecord = allRecords.find { it.date == activeBusinessDate }
 
                     // Active business record state management
                     val currentRecord = remember(dbRecord, activeBusinessDate, allRecords) {
@@ -191,12 +190,6 @@ class MainActivity : ComponentActivity() {
                         }
                     }
 
-                    val expensesFlow = database.expenseDao().getAllExpenses().collectAsState(initial = emptyList())
-                    val allExpenses = expensesFlow.value
-
-                    val creditsFlow = database.creditDao().getAllCredits().collectAsState(initial = emptyList())
-                    val allCredits = creditsFlow.value
-
                     val navBarOpacity by appPreferences.opacityFlow.collectAsState(
                         initial = AppPreferences.DEFAULT_GLASS_OPACITY
                     )
@@ -210,7 +203,7 @@ class MainActivity : ComponentActivity() {
                         themeMode = themeMode,
                         onRecordChanged = { updatedRecord ->
                             coroutineScope.launch {
-                                database.fuelDao().insertOrUpdate(updatedRecord)
+                                firestoreRepository.saveFuelRecord(updatedRecord)
                             }
                         },
                         onDateSelected = { selectedDate ->
@@ -228,22 +221,22 @@ class MainActivity : ComponentActivity() {
                         },
                         onAddOrUpdateExpense = { expenseItem ->
                             coroutineScope.launch {
-                                database.expenseDao().insertOrUpdate(expenseItem)
+                                firestoreRepository.saveExpense(expenseItem)
                             }
                         },
                         onDeleteExpense = { expenseItem ->
                             coroutineScope.launch {
-                                database.expenseDao().deleteExpense(expenseItem)
+                                firestoreRepository.deleteExpense(expenseItem)
                             }
                         },
                         onAddOrUpdateCredit = { creditRecord ->
                             coroutineScope.launch {
-                                database.creditDao().insertOrUpdate(creditRecord)
+                                firestoreRepository.saveCredit(creditRecord)
                             }
                         },
                         onDeleteCredit = { creditRecord ->
                             coroutineScope.launch {
-                                database.creditDao().deleteCredit(creditRecord)
+                                firestoreRepository.deleteCredit(creditRecord)
                             }
                         }
                     )

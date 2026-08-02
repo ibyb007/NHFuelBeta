@@ -384,9 +384,6 @@ fun HomeScreenContent(
     val isPastDate = record.date < todayStr
     val isDayFinalized = record.shift3.isComplete
 
-    // STRICT UNAMBIGUOUS PERMISSION EVALUATION:
-    // Admins, Super Admins, and Owners can ALWAYS edit.
-    // Managers are blocked if: isReadOnly is true, OR it's an unpermitted past date, OR the day is finalized.
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
     val canEditDate = if (isAdminOrOwner) {
@@ -420,7 +417,6 @@ fun HomeScreenContent(
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
-        // WARNING BANNER FOR LOCKED / FINALIZED / READ-ONLY MODES
         if (!canEditDate) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -434,8 +430,8 @@ fun HomeScreenContent(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = when {
-                            session.isReadOnly -> "Read-Only Mode: Data entry is restricted."
-                            isDayFinalized -> "Day Finalized: Full Day entries for ${record.date} are locked and sealed."
+                            session.isReadOnly -> "Read-Only Mode: Data entry is restricted for this account."
+                            isDayFinalized -> "Day Finalized: Full Day entries for ${record.date} are locked for Managers."
                             else -> "Past Date Locked: You do not have permission to edit past entries (${record.date})."
                         },
                         fontSize = 11.sp,
@@ -900,7 +896,8 @@ fun HomeScreenContent(
             }
         }
 
-        if (record.shift3.isComplete && canEditDate && !isDayFinalized) {
+        // REMOVED `!isDayFinalized` BLOCK: Button stays available for Admins/Owners to update finalized records
+        if (record.shift3.isComplete && canEditDate) {
             Button(
                 onClick = { showSaveFullDayDialog = true },
                 modifier = Modifier
@@ -916,7 +913,7 @@ fun HomeScreenContent(
                 )
                 Spacer(Modifier.width(8.dp))
                 Text(
-                    text = "Save & Finalize Full Day Sales",
+                    text = if (isDayFinalized) "Update Finalized Full Day Sales" else "Save & Finalize Full Day Sales",
                     fontWeight = FontWeight.Bold,
                     fontSize = 14.sp
                 )

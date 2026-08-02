@@ -46,11 +46,11 @@ data class DispenserShift(
     val isShiftComplete: Boolean
         get() = petrolN2.isClosed && petrolN3.isClosed && dieselN1.isClosed && dieselN4.isClosed
     val totalCollected: Double get() = cashCollected + digitalCollected + creditCollected
-    
+
     fun getRevenue(petrolPrice: Double, dieselPrice: Double): Double {
         return (petrolSale * petrolPrice) + (dieselSale * dieselPrice)
     }
-    
+
     fun getMismatch(petrolPrice: Double, dieselPrice: Double): Double {
         return totalCollected - getRevenue(petrolPrice, dieselPrice)
     }
@@ -71,11 +71,11 @@ data class DayShift(
     val totalDigitalCollected: Double get() = mpd1.digitalCollected + mpd2.digitalCollected
     val totalCreditCollected: Double get() = mpd1.creditCollected + mpd2.creditCollected
     val totalCollected: Double get() = totalCashCollected + totalDigitalCollected + totalCreditCollected
-    
+
     fun getRevenue(petrolPrice: Double, dieselPrice: Double): Double {
         return mpd1.getRevenue(petrolPrice, dieselPrice) + mpd2.getRevenue(petrolPrice, dieselPrice)
     }
-    
+
     fun getMismatch(petrolPrice: Double, dieselPrice: Double): Double {
         return totalCollected - getRevenue(petrolPrice, dieselPrice)
     }
@@ -111,18 +111,18 @@ data class DailyFuelRecord(
     val totalDieselSell: Double get() = shift1.dieselSale + shift2.dieselSale + shift3.dieselSale
     val totalPetrolTesting: Double get() = shift1.totalPetrolTesting + shift2.totalPetrolTesting + shift3.totalPetrolTesting
     val totalDieselTesting: Double get() = shift1.totalDieselTesting + shift2.totalDieselTesting + shift3.totalDieselTesting
-    val currentPetrolStorage: Double 
+    val currentPetrolStorage: Double
         get() = max(0.0, (petrolTotal + petrolRefill) + petrolVariation - totalPetrolSell)
-    val currentDieselStorage: Double 
+    val currentDieselStorage: Double
         get() = max(0.0, (dieselTotal + dieselRefill) + dieselVariation - totalDieselSell)
-    
+
     fun getPetrolAmount(litres: Double): Double = litres * petrolPrice
     fun getDieselAmount(litres: Double): Double = litres * dieselPrice
     val totalPetrolRevenue: Double get() = getPetrolAmount(totalPetrolSell)
     val totalDieselRevenue: Double get() = getDieselAmount(totalDieselSell)
     val grandTotalRevenue: Double get() = totalPetrolRevenue + totalDieselRevenue
     val dailyCashCollected: Double get() = shift1.totalCashCollected + shift2.totalCashCollected + shift3.totalCashCollected
-    val dailyDigitalCollected: Double get() = shift1.dailyDigitalCollected + shift2.dailyDigitalCollected + shift3.dailyDigitalCollected
+    val dailyDigitalCollected: Double get() = shift1.totalDigitalCollected + shift2.totalDigitalCollected + shift3.totalDigitalCollected
     val dailyCreditCollected: Double get() = shift1.totalCreditCollected + shift2.totalCreditCollected + shift3.totalCreditCollected
     val dailyTotalCollected: Double get() = dailyCashCollected + dailyDigitalCollected + dailyCreditCollected
     val dailyMismatch: Double get() = dailyTotalCollected - grandTotalRevenue

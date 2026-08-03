@@ -1571,7 +1571,8 @@ fun NozzleRow(
     nozzle: NozzleShift,
     showTestingField: Boolean = false,
     canEdit: Boolean = true,
-    onChange: (NozzleShift) -> Unit
+    onChange: (NozzleShift) -> Unit,
+    onUndoReset: () -> Unit = {}
 ) {
     Column(modifier = Modifier.padding(vertical = 2.dp)) {
         Row(
@@ -1579,9 +1580,53 @@ fun NozzleRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
-            NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(open = it)) }
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+                
+                // RED RESET BADGE FOR THE PARTICULAR SHIFT
+                if (nozzle.isReset) {
+                    Surface(
+                        color = Color(0xFFC62828),
+                        shape = RoundedCornerShape(3.dp)
+                    ) {
+                        Text(
+                            text = "RESET",
+                            color = Color.White,
+                            fontSize = 7.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
+                        )
+                    }
+                }
+            }
+
+            NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(open = it)) }
             NumberField("Close", nozzle.close, openValue = nozzle.open, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(close = it)) }
+
+            // UNDO RESET BUTTON
+            if (nozzle.isReset && canEdit) {
+                IconButton(
+                    onClick = onUndoReset,
+                    modifier = Modifier.size(24.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Undo,
+                        contentDescription = "Undo Nozzle Meter Reset",
+                        tint = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
+
+        if (nozzle.isReset) {
+            Text(
+                text = "Meter reset applied. Original Open: ${nozzle.originalOpenBeforeReset} L",
+                fontSize = 8.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFC62828),
+                modifier = Modifier.padding(start = 20.dp, top = 1.dp)
+            )
         }
 
         if (nozzle.testing > 0.0 && !showTestingField) {
@@ -1590,7 +1635,7 @@ fun NozzleRow(
                 fontSize = 9.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(start = 24.dp, top = 1.dp)
+                modifier = Modifier.padding(start = 20.dp, top = 1.dp)
             )
         }
 
@@ -1606,7 +1651,6 @@ fun NozzleRow(
         }
     }
 }
-
 @Composable
 fun NumberField(
     label: String,

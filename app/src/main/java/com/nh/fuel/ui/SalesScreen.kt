@@ -67,13 +67,13 @@ fun SalesScreen(
     val isPastDate = currentRecord.date < todayStr
     val isDayFinalized = currentRecord.shift3.isComplete
 
-    val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-    val canEdit = if (isAdminOrOwner) {
-        true
-    } else {
-        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
-    }
+val canEdit = if (isAdminOrOwner) {
+    true
+} else {
+    !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+}
 
     var selectedPeriod by remember { mutableStateOf(PeriodFilter.DAY) }
     var showDatePickerModal by remember { mutableStateOf(false) }

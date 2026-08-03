@@ -67,13 +67,16 @@ fun SalesScreen(
     val isPastDate = currentRecord.date < todayStr
     val isDayFinalized = currentRecord.shift3.isComplete
 
-val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+    val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-val canEdit = if (isAdminOrOwner) {
-    true
-} else {
-    !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
-}
+    // Strict Permission Guard:
+    // Admins and Owners can ALWAYS edit sales and collections.
+    // Managers are blocked if Read-Only is ON, OR if editing an unpermitted past date, OR if the day is finalized.
+    val canEdit = if (isAdminOrOwner) {
+        true
+    } else {
+        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+    }
 
     var selectedPeriod by remember { mutableStateOf(PeriodFilter.DAY) }
     var showDatePickerModal by remember { mutableStateOf(false) }
@@ -81,7 +84,7 @@ val canEdit = if (isAdminOrOwner) {
     var fromDateInput by remember { mutableStateOf(currentRecord.date) }
     var toDateInput by remember { mutableStateOf(currentRecord.date) }
 
-    // Persistent rate input states
+    // Persistent rate input text states
     var petrolPriceText by remember(currentRecord.date, currentRecord.petrolPrice) {
         mutableStateOf(if (currentRecord.petrolPrice == 0.0) "" else if (currentRecord.petrolPrice % 1.0 == 0.0) currentRecord.petrolPrice.toLong().toString() else currentRecord.petrolPrice.toString())
     }
@@ -168,6 +171,7 @@ val canEdit = if (isAdminOrOwner) {
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
+        // READ-ONLY / LOCK WARNING BANNER
         if (!canEdit) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -181,7 +185,7 @@ val canEdit = if (isAdminOrOwner) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = when {
-                            session.isReadOnly -> "Read-Only Mode: Sales entries are locked."
+                            session.isReadOnly -> "Read-Only Mode Active: Editing and collections entry are disabled."
                             isDayFinalized -> "Day Finalized: Sales entries for ${currentRecord.date} are locked for Managers."
                             else -> "Past Date Locked: You do not have permission to edit past sales data (${currentRecord.date})."
                         },
@@ -316,16 +320,18 @@ val canEdit = if (isAdminOrOwner) {
             ) {
                 OutlinedTextField(
                     value = fromDateInput,
-                    onValueChange = { fromDateInput = it },
+                    onValueChange = { if (canEdit) fromDateInput = it },
                     label = { Text("From Date (YYYY-MM-DD)", fontSize = 9.sp) },
                     singleLine = true,
+                    enabled = canEdit,
                     modifier = Modifier.weight(1f)
                 )
                 OutlinedTextField(
                     value = toDateInput,
-                    onValueChange = { toDateInput = it },
+                    onValueChange = { if (canEdit) toDateInput = it },
                     label = { Text("To Date (YYYY-MM-DD)", fontSize = 9.sp) },
                     singleLine = true,
+                    enabled = canEdit,
                     modifier = Modifier.weight(1f)
                 )
             }

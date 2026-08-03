@@ -7,7 +7,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -17,15 +20,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.google.firebase.firestore.FirebaseFirestore
 import com.nh.fuel.data.AppUserSession
+import com.nh.fuel.data.DailyFuelRecord
+import com.nh.fuel.data.DayShift
+import com.nh.fuel.data.DispenserShift
 import com.nh.fuel.data.KeyStatus
+import com.nh.fuel.data.NozzleShift
 import com.nh.fuel.data.Role
 import com.nh.fuel.data.StaffAccessKey
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,10 +45,13 @@ import kotlin.random.Random
 @Composable
 fun SettingsScreen(
     session: AppUserSession,
+    currentRecord: DailyFuelRecord = DailyFuelRecord(),
+    allRecords: List<DailyFuelRecord> = emptyList(),
     currentOpacity: Float,
     currentThemeMode: ThemeMode,
     onOpacityChanged: (Float) -> Unit,
     onThemeModeChanged: (ThemeMode) -> Unit,
+    onRecordChanged: (DailyFuelRecord) -> Unit = {},
     onLogout: () -> Unit = {},
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
@@ -48,6 +60,7 @@ fun SettingsScreen(
     var showStaffManagementPage by remember { mutableStateOf(false) }
 
     val canAccessAdminPanel = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+    val isSuperAdmin = session.isOwnerLogin || session.role == Role.SUPER_ADMIN
 
     if (showStaffManagementPage && canAccessAdminPanel) {
         StaffManagementScreen(
@@ -59,6 +72,7 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
@@ -107,6 +121,14 @@ fun SettingsScreen(
                             Text("Log Out", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                         }
                     }
+                }
+
+                // Super Admin Hardware Maintenance Mode Tool
+                if (isSuperAdmin) {
+                    SuperAdminMaintenanceSection(
+                        currentRecord = currentRecord,
+                        onRecordChanged = onRecordChanged
+                    )
                 }
 
                 // Staff Access & Roles Navigation Card
@@ -204,6 +226,200 @@ fun SettingsScreen(
                 Spacer(Modifier.height(bottomInset + 8.dp))
             }
         }
+    }
+}
+
+@Composable
+fun SuperAdminMaintenanceSection(
+    currentRecord: DailyFuelRecord,
+    onRecordChanged: (DailyFuelRecord) -> Unit
+) {
+    var showMaintenanceModal by remember { mutableStateOf(false) }
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Icon(Icons.Default.Build, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                Text("Super Admin Maintenance Mode", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+            }
+            Text(
+                text = "Reset individual dispenser nozzle meter readings (e.g. meter replacement or mechanical repair) for ${currentRecord.date} without corrupting prior shift data.",
+                fontSize = 11.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Button(
+                onClick = { showMaintenanceModal = true },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth().height(36.dp)
+            ) {
+                Text("Open Hardware Nozzle Reset Tool", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+            }
+        }
+    }
+
+    if (showMaintenanceModal) {
+        NozzleResetModal(
+            currentRecord = currentRecord,
+            onDismiss = { showMaintenanceModal = false },
+            onConfirmReset = { shiftNum, mpd, nozzleKey, newOpen ->
+                val updatedRecord = applyNozzleReset(currentRecord, shiftNum, mpd, nozzleKey, newOpen)
+                onRecordChanged(updatedRecord)
+                showMaintenanceModal = false
+            }
+        )
+    }
+}
+
+@Composable
+private fun NozzleResetModal(
+    currentRecord: DailyFuelRecord,
+    onDismiss: () -> Unit,
+    onConfirmReset: (Int, String, String, Double) -> Unit
+) {
+    var selectedShift by remember { mutableStateOf(1) }
+    var selectedMpd by remember { mutableStateOf("MPD 1") }
+    var selectedNozzle by remember { mutableStateOf("Petrol N2") }
+    var newOpenValueInput by remember { mutableStateOf("0.0") }
+    var showConfirmDialog by remember { mutableStateOf(false) }
+    var countdown by remember { mutableStateOf(10) }
+
+    LaunchedEffect(showConfirmDialog) {
+        if (showConfirmDialog) {
+            countdown = 10
+            while (countdown > 0) {
+                delay(1000)
+                countdown--
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Nozzle Meter Reset (${currentRecord.date})", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Select Shift to Reset Open Meter:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf(1, 2, 3).forEach { shiftNum ->
+                        FilterChip(
+                            selected = selectedShift == shiftNum,
+                            onClick = { selectedShift = shiftNum },
+                            label = { Text("Shift $shiftNum", fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                Text("Select Dispenser Unit:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    listOf("MPD 1", "MPD 2").forEach { mpd ->
+                        FilterChip(
+                            selected = selectedMpd == mpd,
+                            onClick = { selectedMpd = mpd },
+                            label = { Text(mpd, fontSize = 11.sp) }
+                        )
+                    }
+                }
+
+                Text("Select Nozzle:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    listOf("Petrol N2", "Petrol N3", "Diesel N1", "Diesel N4").forEach { nozzle ->
+                        FilterChip(
+                            selected = selectedNozzle == nozzle,
+                            onClick = { selectedNozzle = nozzle },
+                            label = { Text(nozzle, fontSize = 9.sp) }
+                        )
+                    }
+                }
+
+                OutlinedTextField(
+                    value = newOpenValueInput,
+                    onValueChange = { input -> if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) newOpenValueInput = input },
+                    label = { Text("New Open Reading Value (L)", fontSize = 10.sp) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = { showConfirmDialog = true },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+            ) {
+                Text("Proceed to Reset", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
+    )
+
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            title = { Text("⚠️ WARNING: Confirm Meter Reset", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, fontSize = 15.sp) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text("You are resetting $selectedMpd $selectedNozzle Open Reading for Shift $selectedShift on ${currentRecord.date} to $newOpenValueInput L.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("• Previous shift/day close readings will NOT be altered.\n• A RED 'RESET' badge will mark this nozzle for Shift $selectedShift.\n• Stock calculations will adjust based on sales beyond $newOpenValueInput L.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            },
+            confirmButton = {
+                Button(
+                    enabled = countdown == 0,
+                    onClick = {
+                        showConfirmDialog = false
+                        val parsedVal = newOpenValueInput.toDoubleOrNull() ?: 0.0
+                        onConfirmReset(selectedShift, selectedMpd, selectedNozzle, parsedVal)
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text(if (countdown > 0) "Confirm ($countdown s)" else "CONFIRM RESET", fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = { TextButton(onClick = { showConfirmDialog = false }) { Text("Cancel") } }
+        )
+    }
+}
+
+fun applyNozzleReset(
+    record: DailyFuelRecord,
+    shiftNumber: Int,
+    mpdName: String,
+    nozzleKey: String,
+    newOpenValue: Double
+): DailyFuelRecord {
+    fun updateNozzle(nozzle: NozzleShift): NozzleShift {
+        return nozzle.copy(
+            open = newOpenValue,
+            isReset = true,
+            originalOpenBeforeReset = if (nozzle.originalOpenBeforeReset > 0.0) nozzle.originalOpenBeforeReset else nozzle.open
+        )
+    }
+
+    fun updateDispenser(dispenser: DispenserShift): DispenserShift {
+        return when (nozzleKey) {
+            "Petrol N2" -> dispenser.copy(petrolN2 = updateNozzle(dispenser.petrolN2))
+            "Petrol N3" -> dispenser.copy(petrolN3 = updateNozzle(dispenser.petrolN3))
+            "Diesel N1" -> dispenser.copy(dieselN1 = updateNozzle(dispenser.dieselN1))
+            "Diesel N4" -> dispenser.copy(dieselN4 = updateNozzle(dispenser.dieselN4))
+            else -> dispenser
+        }
+    }
+
+    fun updateShift(shift: DayShift): DayShift {
+        return if (mpdName == "MPD 1") {
+            shift.copy(mpd1 = updateDispenser(shift.mpd1))
+        } else {
+            shift.copy(mpd2 = updateDispenser(shift.mpd2))
+        }
+    }
+
+    return when (shiftNumber) {
+        1 -> record.copy(shift1 = updateShift(record.shift1))
+        2 -> record.copy(shift2 = updateShift(record.shift2))
+        else -> record.copy(shift3 = updateShift(record.shift3))
     }
 }
 

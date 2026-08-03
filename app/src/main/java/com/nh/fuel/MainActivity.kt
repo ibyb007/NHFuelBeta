@@ -71,9 +71,11 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val firestoreRepository = remember { FirestoreRepository() }
 
+                // Session State Management & Auto-Login Restorer
                 var currentSession by remember { mutableStateOf<AppUserSession?>(null) }
                 var isCheckingSession by remember { mutableStateOf(true) }
 
+                // Check for existing saved session on cold start
                 LaunchedEffect(Unit) {
                     currentSession = UserSessionManager.getSavedSession(context)
                     isCheckingSession = false
@@ -95,6 +97,7 @@ class MainActivity : ComponentActivity() {
                                     }
                                     val keyObj = matchingDoc?.toObject(StaffAccessKey::class.java)
 
+                                    // Kick out immediately if key is deleted or revoked
                                     if (matchingDoc == null || keyObj?.status != KeyStatus.ACTIVE) {
                                         coroutineScope.launch {
                                             UserSessionManager.clearSession(context)
@@ -139,6 +142,7 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val activeSession = currentSession!!
 
+                    // --- REALTIME FIRESTORE MULTI-DEVICE SYNC ---
                     val allRecordsFlow = firestoreRepository.observeAllFuelRecords().collectAsState(initial = emptyList())
                     val allRecords = allRecordsFlow.value
 
@@ -148,26 +152,32 @@ class MainActivity : ComponentActivity() {
                     val allCreditsFlow = firestoreRepository.observeAllCredits().collectAsState(initial = emptyList())
                     val allCredits = allCreditsFlow.value
 
+                    // Default active date to today on initial startup
                     var activeBusinessDate by remember {
                         mutableStateOf(
                             SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                         )
                     }
 
+                    // Cold-start anchor: Only set initial date once when records first load,
+                    // so editing past dates doesn't trigger unwanted resets.
+                    var hasAnchoredInitialDate by remember { mutableStateOf(false) }
                     LaunchedEffect(allRecords) {
-                        if (allRecords.isNotEmpty()) {
+                        if (!hasAnchoredInitialDate && allRecords.isNotEmpty()) {
                             val unfinalizedRecord = allRecords.sortedBy { it.date }.find { !it.shift3.isComplete }
                             if (unfinalizedRecord != null) {
                                 activeBusinessDate = unfinalizedRecord.date
-                            } else if (allRecords.none { it.date == activeBusinessDate }) {
+                            } else {
                                 val maxDate = allRecords.maxByOrNull { it.date }?.date
                                 if (maxDate != null) activeBusinessDate = maxDate
                             }
+                            hasAnchoredInitialDate = true
                         }
                     }
 
                     val dbRecord = allRecords.find { it.date == activeBusinessDate }
 
+                    // Active business record state management
                     val currentRecord = remember(dbRecord, activeBusinessDate, allRecords) {
                         if (dbRecord != null) {
                             dbRecord

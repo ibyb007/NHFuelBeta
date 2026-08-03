@@ -384,13 +384,14 @@ fun HomeScreenContent(
     val isPastDate = record.date < todayStr
     val isDayFinalized = record.shift3.isComplete
 
-    val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-    val canEditDate = if (isAdminOrOwner) {
-        true
-    } else {
-        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
-    }
+// If Read-Only is ON, non-admins MUST be blocked completely (canEditDate = false)
+val canEditDate = if (isAdminOrOwner) {
+    true
+} else {
+    !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+}
 
     LaunchedEffect(record.date) {
         selectedShiftTab = 1

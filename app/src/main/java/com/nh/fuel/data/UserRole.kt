@@ -11,7 +11,9 @@ data class StaffAccessKey(
     val role: Role = Role.MANAGER,
     val status: KeyStatus = KeyStatus.ACTIVE,
     val canEditPastDates: Boolean = false,
-    val isReadOnly: Boolean = false, // Read-only privilege toggle for managers
+    @get:com.google.firebase.firestore.PropertyName("isReadOnly")
+    @set:com.google.firebase.firestore.PropertyName("isReadOnly")
+    var isReadOnly: Boolean = false, // Read-only privilege toggle for managers
     val createdBy: String = "",
     val createdAt: String = ""
 )

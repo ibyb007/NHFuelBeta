@@ -330,6 +330,11 @@ private fun StaffKeyRowItem(
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
+    // Keep local switch states synchronized with keyItem updates
+    var localReadOnly by remember(keyItem.isReadOnly) { mutableStateOf(keyItem.isReadOnly) }
+    var localCanEditPast by remember(keyItem.canEditPastDates) { mutableStateOf(keyItem.canEditPastDates) }
+    var localStatus by remember(keyItem.status) { mutableStateOf(keyItem.status) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -368,29 +373,31 @@ private fun StaffKeyRowItem(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // Row 1: Active Status
+            // Active / Revoked Status Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = if (keyItem.status == KeyStatus.ACTIVE) "Status: ACTIVE" else "Status: REVOKED",
+                    text = if (localStatus == KeyStatus.ACTIVE) "Status: ACTIVE" else "Status: REVOKED",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
-                    color = if (keyItem.status == KeyStatus.ACTIVE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+                    color = if (localStatus == KeyStatus.ACTIVE) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
                 )
 
                 Switch(
-                    checked = keyItem.status == KeyStatus.ACTIVE,
+                    checked = localStatus == KeyStatus.ACTIVE,
                     onCheckedChange = { isActive ->
-                        onUpdateKey(keyItem.copy(status = if (isActive) KeyStatus.ACTIVE else KeyStatus.REVOKED))
+                        val newStatus = if (isActive) KeyStatus.ACTIVE else KeyStatus.REVOKED
+                        localStatus = newStatus
+                        onUpdateKey(keyItem.copy(status = newStatus))
                     },
                     modifier = Modifier.height(20.dp)
                 )
             }
 
-            // Row 2: Read-Only Privilege Toggle
+            // READ-ONLY MODE SWITCH (Instantly persists & updates local state)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -398,15 +405,16 @@ private fun StaffKeyRowItem(
             ) {
                 Text("Read-Only Mode (No Data Entry)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Switch(
-                    checked = keyItem.isReadOnly,
+                    checked = localReadOnly,
                     onCheckedChange = { readOnly ->
+                        localReadOnly = readOnly
                         onUpdateKey(keyItem.copy(isReadOnly = readOnly))
                     },
                     modifier = Modifier.height(20.dp)
                 )
             }
 
-            // Row 3: Past Date Edit Toggle
+            // Past Date Edit Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -414,15 +422,16 @@ private fun StaffKeyRowItem(
             ) {
                 Text("Past Date Edit Privilege", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Switch(
-                    checked = keyItem.canEditPastDates,
+                    checked = localCanEditPast,
                     onCheckedChange = { canEdit ->
+                        localCanEditPast = canEdit
                         onUpdateKey(keyItem.copy(canEditPastDates = canEdit))
                     },
                     modifier = Modifier.height(20.dp)
                 )
             }
 
-            // Row 4: Role Switcher
+            // Role Switcher
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

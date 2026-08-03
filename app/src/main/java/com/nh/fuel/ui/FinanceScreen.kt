@@ -172,8 +172,6 @@ fun ExpendScreenContent(
     val isPastDate = expenseDateInput < todayStr
     val isDayFinalized = allRecords.find { it.date == expenseDateInput }?.shift3?.isComplete == true
 
-    // STRICT EDITING PERMISSION:
-    // Blocked if Read-Only OR Unpermitted Past Date OR Finalized Day for Managers
     val canEdit = !session.isReadOnly &&
             (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
             (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
@@ -998,7 +996,6 @@ private fun CustomerLedgerDetailScreen(
 
     val canEdit = !session.isReadOnly
 
-    // Parse text log into structured UI items for table display
     val parsedLogs = remember(customer.notes, customer.date, customer.totalAmountDue, customer.amountPaid) {
         val list = mutableListOf<InternalLogEntry>()
         if (customer.notes.isNotBlank()) {

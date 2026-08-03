@@ -82,46 +82,50 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // --- REAL-TIME ACCESS KEY & PRIVILEGE SYNCHRONIZER ---
-                LaunchedEffect(currentSession?.emailOrKey) {
-                    val session = currentSession ?: return@LaunchedEffect
-                    if (!session.isOwnerLogin) {
-                        val db = FirebaseFirestore.getInstance()
-                        val cleanCode = session.emailOrKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
+                
+LaunchedEffect(currentSession?.emailOrKey) {
+    val session = currentSession ?: return@LaunchedEffect
+    if (!session.isOwnerLogin) {
+        val db = FirebaseFirestore.getInstance()
+        val cleanCode = session.emailOrKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
 
-                        db.collection("access_keys")
-                            .addSnapshotListener { snapshot, _ ->
-                                if (snapshot != null) {
-                                    val matchingDoc = snapshot.documents.find { doc ->
-                                        val keyObj = doc.toObject(StaffAccessKey::class.java)
-                                        keyObj?.accessCode?.replace(Regex("[^A-Za-z0-9]"), "")?.uppercase() == cleanCode
-                                    }
-                                    val keyObj = matchingDoc?.toObject(StaffAccessKey::class.java)
+        db.collection("access_keys")
+            .addSnapshotListener { snapshot, _ ->
+                if (snapshot != null) {
+                    val matchingDoc = snapshot.documents.find { doc ->
+                        val keyObj = doc.toObject(StaffAccessKey::class.java)
+                        keyObj?.accessCode?.replace(Regex("[^A-Za-z0-9]"), "")?.uppercase() == cleanCode
+                    }
+                    val keyObj = matchingDoc?.toObject(StaffAccessKey::class.java)
 
-                                    // Kick out immediately if key is deleted or revoked
-                                    if (matchingDoc == null || keyObj?.status != KeyStatus.ACTIVE) {
-                                        coroutineScope.launch {
-                                            UserSessionManager.clearSession(context)
-                                            currentSession = null
-                                        }
-                                    } else {
-                                        // Instantly sync changes to role, read-only mode, and past date access
-                                        val updatedSession = session.copy(
-                                            canEditPastDates = keyObj.canEditPastDates,
-                                            role = keyObj.role,
-                                            isReadOnly = keyObj.isReadOnly,
-                                            displayName = keyObj.nickname
-                                        )
-                                        if (updatedSession != currentSession) {
-                                            currentSession = updatedSession
-                                            coroutineScope.launch {
-                                                UserSessionManager.saveSession(context, updatedSession)
-                                            }
-                                        }
-                                    }
-                                }
+                    if (matchingDoc == null || keyObj?.status != KeyStatus.ACTIVE) {
+                        coroutineScope.launch {
+                            UserSessionManager.clearSession(context)
+                            currentSession = null
+                        }
+                    } else {
+                        // FORCE UPDATE: Create updated session and re-assign currentSession
+                        val updatedSession = session.copy(
+                            canEditPastDates = keyObj.canEditPastDates,
+                            role = keyObj.role,
+                            isReadOnly = keyObj.isReadOnly,
+                            displayName = keyObj.nickname
+                        )
+                        
+                        if (updatedSession.isReadOnly != currentSession?.isReadOnly ||
+                            updatedSession.canEditPastDates != currentSession?.canEditPastDates ||
+                            updatedSession.role != currentSession?.role
+                        ) {
+                            currentSession = updatedSession
+                            coroutineScope.launch {
+                                UserSessionManager.saveSession(context, updatedSession)
                             }
+                        }
                     }
                 }
+            }
+    }
+}
 
                 if (isCheckingSession) {
                     Box(

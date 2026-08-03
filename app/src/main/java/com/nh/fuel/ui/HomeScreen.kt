@@ -384,14 +384,19 @@ fun HomeScreenContent(
     val isPastDate = record.date < todayStr
     val isDayFinalized = record.shift3.isComplete
 
-val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
+    val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-// If Read-Only is ON, non-admins MUST be blocked completely (canEditDate = false)
-val canEditDate = if (isAdminOrOwner) {
-    true
-} else {
-    !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
-}
+    // Strict Permission Guard:
+    // Owners/Admins ALWAYS have edit rights.
+    // Managers are completely BLOCKED if:
+    // 1. session.isReadOnly is true
+    // 2. It is an unpermitted past date
+    // 3. The day is already finalized
+    val canEditDate = if (isAdminOrOwner) {
+        true
+    } else {
+        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+    }
 
     LaunchedEffect(record.date) {
         selectedShiftTab = 1
@@ -418,6 +423,7 @@ val canEditDate = if (isAdminOrOwner) {
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
+        // READ-ONLY / LOCK WARNING BANNER
         if (!canEditDate) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -431,9 +437,9 @@ val canEditDate = if (isAdminOrOwner) {
                     Spacer(Modifier.width(8.dp))
                     Text(
                         text = when {
-                            session.isReadOnly -> "Read-Only Mode: Data entry is restricted for this account."
-                            isDayFinalized -> "Day Finalized: Full Day entries for ${record.date} are locked for Managers."
-                            else -> "Past Date Locked: You do not have permission to edit past entries (${record.date})."
+                            session.isReadOnly -> "Read-Only Mode Active: Editing and data entry are disabled for this account."
+                            isDayFinalized -> "Day Finalized & Sealed: Entries for ${record.date} are locked for Managers."
+                            else -> "Past Date Locked: You do not have permission to edit past date entries (${record.date})."
                         },
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
@@ -897,7 +903,6 @@ val canEditDate = if (isAdminOrOwner) {
             }
         }
 
-        // REMOVED `!isDayFinalized` BLOCK: Button stays available for Admins/Owners to update finalized records
         if (record.shift3.isComplete && canEditDate) {
             Button(
                 onClick = { showSaveFullDayDialog = true },
@@ -1224,7 +1229,7 @@ fun FuelTankCard(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 OutlinedTextField(
                     value = newRefillInput,
-                    onValueChange = { newRefillInput = it },
+                    onValueChange = { if (canEdit) newRefillInput = it },
                     label = { Text("Add Refill (+)", fontSize = 8.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,

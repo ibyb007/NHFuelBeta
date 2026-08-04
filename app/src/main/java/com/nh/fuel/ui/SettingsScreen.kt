@@ -619,7 +619,7 @@ private fun DrawScope.drawTowRope(fromX: Float, toX: Float, y: Float, alpha: Flo
     val midX = (fromX + toX) / 2f
     val path = Path().apply {
         moveTo(fromX, y)
-        quadraticTo(midX, y + 10f, toX, y)
+        quadraticBezierTo(midX, y + 10f, toX, y)
     }
     drawPath(
         path = path,
@@ -664,8 +664,8 @@ private fun DrawScope.drawFrictionFire(fromX: Float, toX: Float, y: Float, phase
         val sway = (flicker - 0.5f) * 8f
         val flamePath = Path().apply {
             moveTo(x - 6f, y)
-            quadraticTo(x + sway, y - height, x, y - height * 1.6f)
-            quadraticTo(x - sway, y - height, x + 6f, y)
+            quadraticBezierTo(x + sway, y - height, x, y - height * 1.6f)
+            quadraticBezierTo(x - sway, y - height, x + 6f, y)
             close()
         }
         val flameColor = if (flicker < 0.5f) Color(0xFFFF7A18) else Color(0xFFFFC93C)

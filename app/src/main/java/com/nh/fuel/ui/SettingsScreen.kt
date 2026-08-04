@@ -664,8 +664,9 @@ private fun DrawScope.drawFrictionFire(fromX: Float, toX: Float, y: Float, phase
         val sway = (flicker - 0.5f) * 8f
         val flamePath = Path().apply {
             moveTo(x - 6f, y)
-            quadraticTo(x + sway, y - height, x, y - height * 1.6f)
-            quadraticTo(x - sway, y - height, x + 6f, y)
+            quadraticTo(x + sway, y - height)
+            quadraticTo(x - sway, y - height)
+            lineTo(x + 6f, y)
             close()
         }
         val flameColor = if (flicker < 0.5f) Color(0xFFFF7A18) else Color(0xFFFFC93C)

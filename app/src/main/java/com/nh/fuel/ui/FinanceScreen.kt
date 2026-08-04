@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -68,6 +69,7 @@ fun FinanceScreen(
     var selectedCustomerForDetail by remember { mutableStateOf<CreditRecord?>(null) }
 
     if (selectedCustomerForDetail != null) {
+        BackHandler { selectedCustomerForDetail = null }
         val currentCustomer = allCredits.find { it.id == selectedCustomerForDetail?.id } ?: selectedCustomerForDetail!!
         CustomerLedgerDetailScreen(
             session = session,

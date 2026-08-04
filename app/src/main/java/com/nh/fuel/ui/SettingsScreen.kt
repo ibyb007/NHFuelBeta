@@ -178,7 +178,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Super Admin Hardware Maintenance Mode Navigation Tile (Placed below Cloud Backup)
+                // Super Admin Hardware Maintenance Mode (Placed below Cloud Backup)
                 if (isSuperAdmin) {
                     Card(
                         modifier = Modifier
@@ -273,7 +273,7 @@ private fun HardwareMaintenanceScreen(
     var selectedMpd by remember { mutableStateOf("MPD 1") }
     var selectedNozzle by remember { mutableStateOf("Petrol N2") }
 
-    // Dynamically retrieve current reading of whichever nozzle is selected
+    // Live fetching current recorded open reading of selected nozzle
     val currentReading = remember(currentRecord, selectedShift, selectedMpd, selectedNozzle) {
         val shiftObj = when (selectedShift) {
             1 -> currentRecord.shift1
@@ -281,22 +281,21 @@ private fun HardwareMaintenanceScreen(
             else -> currentRecord.shift3
         }
         val dispenser = if (selectedMpd == "MPD 1") shiftObj.mpd1 else shiftObj.mpd2
-        val nozzle = when (selectedNozzle) {
-            "Petrol N2" -> dispenser.petrolN2
-            "Petrol N3" -> dispenser.petrolN3
-            "Diesel N1" -> dispenser.dieselN1
-            else -> dispenser.dieselN4
+        when (selectedNozzle) {
+            "Petrol N2" -> dispenser.petrolN2.open
+            "Petrol N3" -> dispenser.petrolN3.open
+            "Diesel N1" -> dispenser.dieselN1.open
+            else -> dispenser.dieselN4.open
         }
-        nozzle.open
     }
 
     var newOpenValueInput by remember(currentReading) { mutableStateOf(currentReading.toString()) }
     var showConfirmDialog by remember { mutableStateOf(false) }
-    var countdown by remember { mutableIntStateOf(10) }
+    var countdown by remember { mutableIntStateOf(5) } // 5 Seconds Countdown
 
     LaunchedEffect(showConfirmDialog) {
         if (showConfirmDialog) {
-            countdown = 10
+            countdown = 5
             while (countdown > 0) {
                 delay(1000)
                 countdown--

@@ -119,16 +119,20 @@ fun MainContainerScreen(
                     topInset = topInset,
                     bottomInset = bottomInset
                 )
-                4 -> SettingsScreen(
-                    session = session,
-                    currentOpacity = navBarOpacity,
-                    currentThemeMode = themeMode,
-                    onOpacityChanged = onOpacityChanged,
-                    onThemeModeChanged = onThemeModeChanged,
-                    onLogout = onLogout,
-                    topInset = topInset,
-                    bottomInset = bottomInset
-                )
+                
+4 -> SettingsScreen(
+    session = session,
+    currentRecord = record,         // <--- PASS CURRENT DAILY RECORD
+    allRecords = allRecords,        // <--- PASS ALL RECORDS
+    currentOpacity = navBarOpacity,
+    currentThemeMode = themeMode,
+    onOpacityChanged = onOpacityChanged,
+    onThemeModeChanged = onThemeModeChanged,
+    onRecordChanged = onRecordChanged, // <--- PASS SAVE CALLBACK
+    onLogout = onLogout,
+    topInset = topInset,
+    bottomInset = bottomInset
+)
             }
         }
 

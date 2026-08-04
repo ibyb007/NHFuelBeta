@@ -79,10 +79,18 @@ fun FinanceScreen(
             onBack = { selectedCustomerForDetail = null },
             onUpdateCustomer = { updated ->
                 onAddOrUpdateCredit(updated)
+                val paidNow = updated.amountPaid - currentCustomer.amountPaid
+                val logMsg = if (paidNow > 0.0) {
+                    "recorded payment of ₹$paidNow from ${updated.customerName} (${updated.vehicleNumber}), balance ₹${updated.remainingBalance}"
+                } else {
+                    "updated credit ledger for ${updated.customerName} (${updated.vehicleNumber})"
+                }
+                ActivityLogger.log(session, logMsg)
                 selectedCustomerForDetail = updated
             },
             onDeleteCustomer = {
                 onDeleteCredit(currentCustomer)
+                ActivityLogger.log(session, "deleted credit ledger for ${currentCustomer.customerName} (${currentCustomer.vehicleNumber})")
                 selectedCustomerForDetail = null
             },
             topInset = topInset,
@@ -317,6 +325,7 @@ fun ExpendScreenContent(
                                         timestamp = nowTimeStr
                                     )
                                 )
+                                ActivityLogger.log(session, "added expense of ₹$amount (${descriptionInput.trim()}) on $targetDate")
                                 descriptionInput = ""
                                 amountInput = ""
                             }
@@ -436,7 +445,10 @@ fun ExpendScreenContent(
                 item = item,
                 canEdit = canEdit,
                 onEdit = { editingExpense = item },
-                onDelete = { onDeleteExpense(item) }
+                onDelete = {
+                    onDeleteExpense(item)
+                    ActivityLogger.log(session, "deleted expense of ₹${item.amount} (${item.description}) on ${item.date}")
+                }
             )
         }
     }
@@ -471,6 +483,7 @@ fun ExpendScreenContent(
             onSave = { updatedExpense ->
                 if (canEdit) {
                     onAddOrUpdateExpense(updatedExpense)
+                    ActivityLogger.log(session, "edited expense of ₹${updatedExpense.amount} (${updatedExpense.description}) on ${updatedExpense.date}")
                 }
                 editingExpense = null
             }
@@ -785,7 +798,10 @@ private fun CreditLedgerContent(
                     },
                     onEditCustomerInfo = { editingCustomerInfoCredit = credit },
                     onSettle = { creditToSettle = credit },
-                    onDelete = { onDeleteCredit(credit) }
+                    onDelete = {
+                        onDeleteCredit(credit)
+                        ActivityLogger.log(session, "deleted credit ledger for ${credit.customerName} (${credit.vehicleNumber})")
+                    }
                 )
             }
         }
@@ -801,6 +817,12 @@ private fun CreditLedgerContent(
             onDismiss = { showAddCreditDialog = false },
             onSave = { newCredit ->
                 onAddOrUpdateCredit(newCredit)
+                val logMsg = if (isAddingNewDueToUser) {
+                    "added new due of ₹${newCredit.totalAmountDue} for ${newCredit.customerName} (${newCredit.vehicleNumber})"
+                } else {
+                    "added new credit entry for ${newCredit.customerName} (${newCredit.vehicleNumber}), due ₹${newCredit.totalAmountDue}"
+                }
+                ActivityLogger.log(session, logMsg)
                 showAddCreditDialog = false
             }
         )
@@ -813,6 +835,7 @@ private fun CreditLedgerContent(
                 onDismiss = { editingCustomerInfoCredit = null },
                 onSave = { updatedCredit ->
                     onAddOrUpdateCredit(updatedCredit)
+                    ActivityLogger.log(session, "updated customer info for ${updatedCredit.customerName} (${updatedCredit.vehicleNumber})")
                     editingCustomerInfoCredit = null
                 }
             )
@@ -826,6 +849,8 @@ private fun CreditLedgerContent(
                 onDismiss = { creditToSettle = null },
                 onConfirmSettlement = { updatedCredit ->
                     onAddOrUpdateCredit(updatedCredit)
+                    val paidNow = updatedCredit.amountPaid - credit.amountPaid
+                    ActivityLogger.log(session, "recorded payment of ₹$paidNow from ${updatedCredit.customerName} (${updatedCredit.vehicleNumber}), balance ₹${updatedCredit.remainingBalance}")
                     creditToSettle = null
                 }
             )

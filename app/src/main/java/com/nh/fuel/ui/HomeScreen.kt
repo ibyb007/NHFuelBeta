@@ -1,10 +1,5 @@
 package com.nh.fuel.ui
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.Network
-import android.net.NetworkCapabilities
-import android.net.NetworkRequest
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -29,7 +24,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -43,44 +37,6 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
-
-// --- NETWORK OBSERVER HELPER ---
-@Composable
-fun rememberIsNetworkConnected(): State<Boolean> {
-    val context = LocalContext.current
-    return produceState(initialValue = isCurrentlyConnected(context)) {
-        val connectivityManager =
-            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-
-        val callback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(network: Network) {
-                value = true
-            }
-
-            override fun onLost(network: Network) {
-                value = false
-            }
-        }
-
-        val request = NetworkRequest.Builder()
-            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-            .build()
-
-        connectivityManager.registerNetworkCallback(request, callback)
-
-        awaitDispose {
-            connectivityManager.unregisterNetworkCallback(callback)
-        }
-    }
-}
-
-private fun isCurrentlyConnected(context: Context): Boolean {
-    val connectivityManager =
-        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-    val activeNetwork = connectivityManager.activeNetwork ?: return false
-    val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -106,7 +62,7 @@ fun MainContainerScreen(
     var currentTimeString by remember { mutableStateOf("") }
     var showThemeMenu by remember { mutableStateOf(false) }
 
-    // Real-time Internet Connectivity Observer
+    // Real-time Internet Connectivity Observer (from NetworkObserver.kt)
     val isConnected by rememberIsNetworkConnected()
 
     LaunchedEffect(Unit) {

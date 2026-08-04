@@ -1,7 +1,5 @@
 package com.nh.fuel.ui
 
-import android.graphics.Bitmap
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -18,7 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +24,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.google.firebase.firestore.FirebaseFirestore
+import com.nh.fuel.data.ActivityLogger
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
@@ -40,7 +38,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlin.math.roundToInt
-import kotlin.random.Random
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +57,7 @@ fun SettingsScreen(
     var sliderValue by remember(currentOpacity) { mutableFloatStateOf(currentOpacity) }
     var showStaffManagementPage by remember { mutableStateOf(false) }
     var showMaintenancePage by remember { mutableStateOf(false) }
+    var showActivityLogPage by remember { mutableStateOf(false) }
 
     val canAccessAdminPanel = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
     val isSuperAdmin = session.isOwnerLogin || session.role == Role.SUPER_ADMIN
@@ -72,9 +70,17 @@ fun SettingsScreen(
         )
     } else if (showMaintenancePage && isSuperAdmin) {
         HardwareMaintenanceScreen(
+            session = session,
             currentRecord = currentRecord,
             onBack = { showMaintenancePage = false },
             onRecordChanged = onRecordChanged,
+            topInset = topInset,
+            bottomInset = bottomInset
+        )
+    } else if (showActivityLogPage) {
+        ActivityLogScreen(
+            session = session,
+            onBack = { showActivityLogPage = false },
             topInset = topInset,
             bottomInset = bottomInset
         )
@@ -178,7 +184,31 @@ fun SettingsScreen(
                     }
                 }
 
-                // Super Admin Hardware Maintenance Mode (Placed below Cloud Backup)
+                // Activity & Audit Logs Tile
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                        .clickable { showActivityLogPage = true },
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                            Column {
+                                Text("Activity & Audit Logs", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("View history of changes for the last 90 days", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                // Super Admin Hardware Maintenance Mode (Placed below Activity Logs)
                 if (isSuperAdmin) {
                     Card(
                         modifier = Modifier
@@ -263,6 +293,7 @@ fun SettingsScreen(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HardwareMaintenanceScreen(
+    session: AppUserSession,
     currentRecord: DailyFuelRecord,
     onBack: () -> Unit,
     onRecordChanged: (DailyFuelRecord) -> Unit,
@@ -413,6 +444,7 @@ private fun HardwareMaintenanceScreen(
                         val parsedVal = newOpenValueInput.toDoubleOrNull() ?: 0.0
                         val updatedRecord = applyNozzleReset(currentRecord, selectedShift, selectedMpd, selectedNozzle, parsedVal)
                         onRecordChanged(updatedRecord)
+                        ActivityLogger.log(session, "reset $selectedMpd $selectedNozzle to $parsedVal L")
                         onBack()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
@@ -461,9 +493,9 @@ fun applyNozzleReset(
     }
 
     return when (shiftNumber) {
-        1 -> record.copy(shift1 = updateShift(record.shift1))
-        2 -> record.copy(shift2 = updateShift(record.shift2))
-        else -> record.copy(shift3 = updateShift(record.shift3))
+        1 -> record.copy(shift1 = updateShift(record.shift1), lastUpdatedTimestamp = System.currentTimeMillis())
+        2 -> record.copy(shift2 = updateShift(record.shift2), lastUpdatedTimestamp = System.currentTimeMillis())
+        else -> record.copy(shift3 = updateShift(record.shift3), lastUpdatedTimestamp = System.currentTimeMillis())
     }
 }
 

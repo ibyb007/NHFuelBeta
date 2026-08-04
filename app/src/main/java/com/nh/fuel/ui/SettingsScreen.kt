@@ -28,7 +28,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -43,7 +42,6 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -166,14 +164,14 @@ fun SettingsScreen(
                 modifier = Modifier
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Spacer(Modifier.height(topInset + 4.dp))
+                Spacer(Modifier.height(topInset + 2.dp))
 
                 Text(
                     text = "App Settings & Profile",
                     fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
+                    fontSize = 17.sp,
                     color = MaterialTheme.colorScheme.onBackground
                 )
 
@@ -185,28 +183,28 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(12.dp),
+                            .padding(10.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Text(session.displayName, fontWeight = FontWeight.Bold, fontSize = 15.sp)
-                            Text("Role: ${session.role.name}", fontSize = 11.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                            Text(session.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                            Text("Role: ${session.role.name}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                             Text(
                                 "Permissions: ${if (session.isReadOnly) "Read-Only Mode" else "Full Access"} | Past Edit: ${if (session.canEditPastDates) "Allowed" else "Locked"}",
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
 
                         OutlinedButton(
                             onClick = onLogout,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                            modifier = Modifier.height(32.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
                         ) {
-                            Icon(Icons.Default.Logout, contentDescription = "Log Out", modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Logout, contentDescription = "Log Out", modifier = Modifier.size(13.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Log Out", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            Text("Log Out", fontSize = 10.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -221,14 +219,14 @@ fun SettingsScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.AdminPanelSettings, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 Column {
-                                    Text("Staff Access & Roles", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Staff Access & Roles", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Text("Tap to manage staff keys, roles & privileges", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -247,14 +245,14 @@ fun SettingsScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 Column {
-                                    Text("Encrypted Emergency Backup", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("Encrypted Emergency Backup", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Text("AES-256 backup/restore for sales, expenses & credit ledger", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -272,14 +270,14 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        modifier = Modifier.fillMaxWidth().padding(12.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                             Column {
-                                Text("Activity & Audit Logs", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text("Activity & Audit Logs", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                 Text("View history of changes for the last 90 days", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                         }
@@ -297,14 +295,14 @@ fun SettingsScreen(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
                     ) {
                         Row(
-                            modifier = Modifier.fillMaxWidth().padding(14.dp),
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.Build, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                                 Column {
-                                    Text("Super Admin Maintenance Mode", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text("Super Admin Maintenance Mode", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onErrorContainer)
                                     Text("Reset hardware meter readings for pump recalibration", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
@@ -319,11 +317,11 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                 ) {
                     Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 2.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween
                     ) {
-                        Text("Nav Bar Opacity", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Text("Nav Bar Opacity", fontWeight = FontWeight.Bold, fontSize = 11.sp)
                         Slider(
                             value = sliderValue,
                             onValueChange = {
@@ -331,41 +329,38 @@ fun SettingsScreen(
                                 onOpacityChanged(it)
                             },
                             valueRange = 0.2f..1.0f,
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                            modifier = Modifier.weight(1f).padding(horizontal = 6.dp)
                         )
-                        Text("${(sliderValue * 100).roundToInt()}%", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("${(sliderValue * 100).roundToInt()}%", fontWeight = FontWeight.ExtraBold, fontSize = 11.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
 
                 // DEVELOPER ANIMATED CREDIT SECTION INSIDE SCROLLABLE AREA
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "App developed by:",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                DeveloperCreditLine()
-                Spacer(Modifier.height(2.dp))
-                DeveloperInfoSection()
+                Column(modifier = Modifier.padding(top = 2.dp)) {
+                    Text(
+                        text = "App developed by:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
+                    DeveloperCreditLine()
+                }
 
-                Spacer(Modifier.height(8.dp))
-            }
-
-            // CENTER BOTTOM VERSION NUMBER
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = bottomInset + 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "Version: ${BuildConfig.VERSION_NAME}",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                )
+                // CENTER BOTTOM VERSION NUMBER (BELOW ANIMATION INSIDE SCROLLABLE AREA)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp, bottom = bottomInset + 8.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Version: ${BuildConfig.VERSION_NAME}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                    )
+                }
             }
         }
     }
@@ -412,6 +407,8 @@ private fun LocalBackupScreen(
 
                     val backupType = object : TypeToken<FullStationBackupData>() {}.type
                     val backupObj: FullStationBackupData = Gson().fromJson(jsonString, backupType)
+                        ?: throw Exception("Corrupted backup format.")
+
                     val db = FirebaseFirestore.getInstance()
 
                     // Restore Fuel Records
@@ -713,8 +710,8 @@ private fun DeveloperCreditLine() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 72.dp)
-            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .heightIn(min = 60.dp)
+            .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
         if (showTruck) {
             Canvas(modifier = Modifier.matchParentSize()) {
@@ -744,10 +741,10 @@ private fun DeveloperCreditLine() {
             }
             Text(
                 text = "🚛",
-                fontSize = 42.sp,
+                fontSize = 38.sp,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .offset(x = truckLeftX.dp, y = (-14).dp)
+                    .offset(x = truckLeftX.dp, y = (-8).dp)
                     .alpha(truckExitAlpha.value)
             )
         }
@@ -755,7 +752,7 @@ private fun DeveloperCreditLine() {
             text = "Bony Biswas",
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .offset(x = textLeftX.dp, y = (-14).dp)
+                .offset(x = textLeftX.dp, y = (-8).dp)
         )
     }
 }
@@ -830,14 +827,14 @@ private fun DrawScope.drawFrictionFire(fromX: Float, toX: Float, y: Float, phase
 
 @Composable
 private fun Extruded3DText(text: String, modifier: Modifier = Modifier) {
-    val depth = 6
+    val depth = 5
     Box(modifier = modifier) {
         for (i in depth downTo 1) {
             Text(
                 text = text,
                 fontWeight = FontWeight.ExtraBold,
                 fontStyle = FontStyle.Italic,
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 color = GoldShadeDark.copy(alpha = 1f - (i * 0.06f)),
                 modifier = Modifier.offset(x = i.dp, y = i.dp)
             )
@@ -846,7 +843,7 @@ private fun Extruded3DText(text: String, modifier: Modifier = Modifier) {
             text = text,
             fontWeight = FontWeight.ExtraBold,
             fontStyle = FontStyle.Italic,
-            fontSize = 22.sp,
+            fontSize = 20.sp,
             color = GoldColor,
             style = LocalTextStyle.current.copy(
                 shadow = androidx.compose.ui.graphics.Shadow(
@@ -861,94 +858,6 @@ private fun Extruded3DText(text: String, modifier: Modifier = Modifier) {
 
 private val GoldColor = Color(0xFFCC9A06)
 private val GoldShadeDark = Color(0xFF7A5C04)
-
-@Composable
-private fun DeveloperInfoSection() {
-    val uriHandler = LocalUriHandler.current
-    Row(modifier = Modifier.fillMaxWidth()) {
-        DeveloperContactCard(
-            icon = { TelegramIcon() },
-            name = "Telegram",
-            handle = "t.me/ibyb007",
-            onClick = { uriHandler.openUri("https://t.me/ibyb007") },
-            modifier = Modifier.weight(1f)
-        )
-        DeveloperContactCard(
-            icon = { GitHubIcon() },
-            name = "GitHub",
-            handle = "@ibyb007",
-            onClick = { uriHandler.openUri("https://github.com/ibyb007") },
-            modifier = Modifier.weight(1f)
-        )
-    }
-}
-
-@Composable
-private fun DeveloperContactCard(
-    icon: @Composable () -> Unit,
-    name: String,
-    handle: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = modifier
-            .clickable(onClick = onClick)
-            .padding(vertical = 8.dp, horizontal = 4.dp)
-    ) {
-        icon()
-        Spacer(Modifier.width(8.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(name, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
-            Text(
-                handle,
-                color = MaterialTheme.colorScheme.primary,
-                style = MaterialTheme.typography.labelMedium,
-                maxLines = 1
-            )
-        }
-        Icon(
-            Icons.AutoMirrored.Filled.OpenInNew,
-            contentDescription = "Open $name",
-            modifier = Modifier.size(16.dp),
-            tint = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-    }
-}
-
-@Composable
-private fun TelegramIcon() {
-    Canvas(modifier = Modifier.size(28.dp)) {
-        val radius = size.minDimension / 2f
-        drawCircle(color = Color(0xFF29A9EB), radius = radius)
-        val plane = Path().apply {
-            moveTo(size.width * 0.22f, size.height * 0.52f)
-            lineTo(size.width * 0.80f, size.height * 0.22f)
-            lineTo(size.width * 0.64f, size.height * 0.80f)
-            lineTo(size.width * 0.46f, size.height * 0.60f)
-            lineTo(size.width * 0.34f, size.height * 0.70f)
-            lineTo(size.width * 0.38f, size.height * 0.50f)
-            close()
-        }
-        drawPath(plane, color = Color.White)
-    }
-}
-
-@Composable
-private fun GitHubIcon() {
-    Box(contentAlignment = Alignment.Center) {
-        Canvas(modifier = Modifier.size(28.dp)) {
-            drawCircle(color = Color(0xFF181717), radius = size.minDimension / 2f)
-        }
-        Text(
-            ">_",
-            color = Color.White,
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold
-        )
-    }
-}
 
 // ============================================================================
 // HARDWARE MAINTENANCE & STAFF MANAGEMENT SCREENS

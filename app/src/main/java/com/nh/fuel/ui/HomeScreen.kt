@@ -163,6 +163,8 @@ fun MainContainerScreen(
                     session = session,
                     currentRecord = record,
                     allRecords = allRecords,
+                    allExpenses = allExpenses,
+                    allCredits = allCredits,
                     currentOpacity = navBarOpacity,
                     currentThemeMode = themeMode,
                     onOpacityChanged = onOpacityChanged,

@@ -54,6 +54,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
+import com.nh.fuel.BuildConfig
 import com.nh.fuel.data.ActivityLogger
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.CreditRecord
@@ -320,7 +321,7 @@ fun SettingsScreen(
                 )
                 DeveloperCreditLine()
 
-                // CENTER BOTTOM VERSION NUMBER
+                // CENTER BOTTOM DYNAMIC APP VERSION NUMBER
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -328,7 +329,7 @@ fun SettingsScreen(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "Version: 1.9.6",
+                        text = "Version: ${BuildConfig.VERSION_NAME}",
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)

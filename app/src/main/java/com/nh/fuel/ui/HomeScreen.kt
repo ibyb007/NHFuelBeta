@@ -1674,10 +1674,10 @@ fun NozzleRow(
             Column(modifier = Modifier.weight(1f)) {
                 NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset) { onChange(nozzle.copy(open = it)) }
                 
-                // RED •R INDICATOR DIRECTLY BELOW OPEN VALUE BOX
+                // RED "Re" INDICATOR DIRECTLY BELOW OPEN VALUE BOX
                 if (nozzle.isReset) {
                     Text(
-                        text = "•R",
+                        text = "Re",
                         color = Color(0xFFC62828),
                         fontWeight = FontWeight.ExtraBold,
                         fontSize = 11.sp,

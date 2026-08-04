@@ -5,6 +5,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
@@ -71,10 +72,13 @@ fun MainContainerScreen(
     var currentTimeString by remember { mutableStateOf("") }
     var showThemeMenu by remember { mutableStateOf(false) }
 
-    // Real-time Internet Connectivity Observer
+    // PREVENT APP EXIT ON BACK GESTURE: SWITCH TO HOME TAB FIRST
+    if (selectedMainTab != 0) {
+        BackHandler { selectedMainTab = 0 }
+    }
+
     val isConnected by rememberIsNetworkConnected()
 
-    // Dynamic Header "Last Updated Time Ago" State
     var timeAgoText by remember { mutableStateOf("") }
     var showTimeAgoTicker by remember { mutableStateOf(false) }
 
@@ -92,7 +96,7 @@ fun MainContainerScreen(
             }
 
             showTimeAgoTicker = true
-            delay(5000) // Show for 5 seconds then disappear
+            delay(5000)
             showTimeAgoTicker = false
         }
     }
@@ -206,7 +210,6 @@ fun MainContainerScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
 
-                        // DYNAMIC TIME AGO TICKER
                         AnimatedVisibility(
                             visible = showTimeAgoTicker,
                             enter = fadeIn(),
@@ -226,7 +229,6 @@ fun MainContainerScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // NETWORK STATUS DOT INDICATOR
                     Box(
                         modifier = Modifier
                             .size(10.dp)
@@ -234,7 +236,6 @@ fun MainContainerScreen(
                             .background(if (isConnected) Color(0xFF2E7D32) else Color(0xFFC62828))
                     )
 
-                    // THEME SWITCHER
                     Box {
                         IconButton(
                             onClick = { showThemeMenu = true },
@@ -442,15 +443,24 @@ fun HomeScreenContent(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    // FIX: Dynamically auto-resume on whichever shift is currently active & uncompleted
-    var selectedShiftTab by remember(record.date) {
-        mutableIntStateOf(
-            when {
-                !record.shift1.isComplete -> 1
-                !record.shift2.isComplete -> 2
-                else -> 3
-            }
-        )
+    // RESOLVE COLD START RESUMPTION: DYNAMICALLY CALCULATE INCOMPLETE SHIFT ON RECORD LOAD
+    val activeUncompletedShift = remember(record) {
+        when {
+            !record.shift1.isComplete -> 1
+            !record.shift2.isComplete -> 2
+            else -> 3
+        }
+    }
+
+    var selectedShiftTab by remember(record.date) { mutableIntStateOf(activeUncompletedShift) }
+
+    // KEEP TAB SYNCED IF CURRENT SHIFT GETS COMPLETED
+    LaunchedEffect(record) {
+        if (selectedShiftTab == 1 && record.shift1.isComplete) {
+            selectedShiftTab = 2
+        } else if (selectedShiftTab == 2 && record.shift2.isComplete) {
+            selectedShiftTab = 3
+        }
     }
 
     var showDatePickerModal by remember { mutableStateOf(false) }

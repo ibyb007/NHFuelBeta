@@ -200,45 +200,7 @@ class MainActivity : ComponentActivity() {
                                         else -> s1Open
                                     }
                                 }
-fun applyNozzleReset(
-    record: DailyFuelRecord,
-    shiftNumber: Int,
-    mpdName: String,
-    nozzleKey: String,
-    newOpenValue: Double
-): DailyFuelRecord {
-    fun updateNozzle(nozzle: NozzleShift): NozzleShift {
-        return nozzle.copy(
-            open = newOpenValue,
-            isReset = true,
-            originalOpenBeforeReset = if (nozzle.originalOpenBeforeReset > 0.0) nozzle.originalOpenBeforeReset else nozzle.open
-        )
-    }
 
-    fun updateDispenser(dispenser: DispenserShift): DispenserShift {
-        return when (nozzleKey) {
-            "Petrol N2" -> dispenser.copy(petrolN2 = updateNozzle(dispenser.petrolN2))
-            "Petrol N3" -> dispenser.copy(petrolN3 = updateNozzle(dispenser.petrolN3))
-            "Diesel N1" -> dispenser.copy(dieselN1 = updateNozzle(dispenser.dieselN1))
-            "Diesel N4" -> dispenser.copy(dieselN4 = updateNozzle(dispenser.dieselN4))
-            else -> dispenser
-        }
-    }
-
-    fun updateShift(shift: DayShift): DayShift {
-        return if (mpdName == "MPD 1") {
-            shift.copy(mpd1 = updateDispenser(shift.mpd1))
-        } else {
-            shift.copy(mpd2 = updateDispenser(shift.mpd2))
-        }
-    }
-
-    return when (shiftNumber) {
-        1 -> record.copy(shift1 = updateShift(record.shift1))
-        2 -> record.copy(shift2 = updateShift(record.shift2))
-        else -> record.copy(shift3 = updateShift(record.shift3))
-    }
-}
                                 val carriedShift1 = DayShift(
                                     shiftNumber = 1,
                                     mpd1 = DispenserShift(

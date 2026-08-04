@@ -29,7 +29,8 @@ data class DailyFuelRecord(
     val dieselPrice: Double = 90.0,
     val shift1: DayShift = DayShift(1),
     val shift2: DayShift = DayShift(2),
-    val shift3: DayShift = DayShift(3)
+    val shift3: DayShift = DayShift(3),
+    val lastUpdatedTimestamp: Long = System.currentTimeMillis() // <--- Dynamic Header Update Ticker
 ) {
     val totalPetrolSell: Double get() = shift1.petrolSale + shift2.petrolSale + shift3.petrolSale
     val totalDieselSell: Double get() = shift1.dieselSale + shift2.dieselSale + shift3.dieselSale

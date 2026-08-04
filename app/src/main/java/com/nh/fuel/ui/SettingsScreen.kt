@@ -46,6 +46,8 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -54,9 +56,11 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
 import com.nh.fuel.data.ActivityLogger
 import com.nh.fuel.data.AppUserSession
+import com.nh.fuel.data.CreditRecord
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
 import com.nh.fuel.data.DispenserShift
+import com.nh.fuel.data.ExpenseItem
 import com.nh.fuel.data.KeyStatus
 import com.nh.fuel.data.NozzleShift
 import com.nh.fuel.data.Role
@@ -67,11 +71,24 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.security.SecureRandom
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.IvParameterSpec
+import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 import kotlin.random.Random
+
+data class FullStationBackupData(
+    val records: List<DailyFuelRecord> = emptyList(),
+    val expenses: List<ExpenseItem> = emptyList(),
+    val credits: List<CreditRecord> = emptyList(),
+    val timestamp: Long = System.currentTimeMillis()
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -79,6 +96,8 @@ fun SettingsScreen(
     session: AppUserSession,
     currentRecord: DailyFuelRecord = DailyFuelRecord(),
     allRecords: List<DailyFuelRecord> = emptyList(),
+    allExpenses: List<ExpenseItem> = emptyList(),
+    allCredits: List<CreditRecord> = emptyList(),
     currentOpacity: Float,
     currentThemeMode: ThemeMode,
     onOpacityChanged: (Float) -> Unit,
@@ -127,6 +146,8 @@ fun SettingsScreen(
         LocalBackupScreen(
             session = session,
             allRecords = allRecords,
+            allExpenses = allExpenses,
+            allCredits = allCredits,
             onBack = { showLocalBackupPage = false },
             topInset = topInset,
             bottomInset = bottomInset
@@ -137,8 +158,12 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            verticalArrangement = Arrangement.SpaceBetween
         ) {
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
                 Spacer(Modifier.height(topInset + 4.dp))
 
                 Text(
@@ -208,7 +233,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Local Emergency Backup & Restore Tile (Super Admin Only)
+                // Local Encrypted Backup Tile (Super Admin Only)
                 if (isSuperAdmin) {
                     Card(
                         modifier = Modifier
@@ -225,8 +250,8 @@ fun SettingsScreen(
                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                                 Column {
-                                    Text("Local Emergency Backup & Restore", fontWeight = FontWeight.Bold, fontSize = 14.sp)
-                                    Text("Export or restore offline station records locally", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Text("Encrypted Emergency Backup", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                    Text("AES-256 backup/restore for sales, expenses & credit ledger", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -284,30 +309,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // Nav Bar Opacity Card
-                Card(
-                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Nav Bar Opacity", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                        Slider(
-                            value = sliderValue,
-                            onValueChange = {
-                                sliderValue = it
-                                onOpacityChanged(it)
-                            },
-                            valueRange = 0.2f..1.0f,
-                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
-                        )
-                        Text("${(sliderValue * 100).roundToInt()}%", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-
                 // DEVELOPER ANIMATED CREDIT SECTION
                 Spacer(Modifier.height(4.dp))
                 Text(
@@ -335,18 +336,48 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(bottomInset + 8.dp))
+            }
+
+            // Compact Bottom Nav Bar Opacity Bar
+            Column {
+                Card(
+                    modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Nav Bar Opacity", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                        Slider(
+                            value = sliderValue,
+                            onValueChange = {
+                                sliderValue = it
+                                onOpacityChanged(it)
+                            },
+                            valueRange = 0.2f..1.0f,
+                            modifier = Modifier.weight(1f).padding(horizontal = 8.dp)
+                        )
+                        Text("${(sliderValue * 100).roundToInt()}%", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                Spacer(Modifier.height(bottomInset + 8.dp))
+            }
         }
     }
 }
 
 // ============================================================================
-// DEDICATED LOCAL EMERGENCY BACKUP & RESTORE SCREEN (SUPER ADMIN ONLY)
+// DEDICATED ENCRYPTED LOCAL BACKUP & RESTORE SCREEN (SCANAPP AES-256 ENGINE)
 // ============================================================================
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LocalBackupScreen(
     session: AppUserSession,
     allRecords: List<DailyFuelRecord>,
+    allExpenses: List<ExpenseItem>,
+    allCredits: List<CreditRecord>,
     onBack: () -> Unit,
     topInset: Dp,
     bottomInset: Dp
@@ -354,6 +385,8 @@ private fun LocalBackupScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    var passphrase by remember { mutableStateOf("") }
+    var passphraseVisible by remember { mutableStateOf(false) }
     var isProcessing by remember { mutableStateOf(false) }
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
@@ -362,31 +395,47 @@ private fun LocalBackupScreen(
     ) { uri: Uri? ->
         if (uri != null) {
             isProcessing = true
-            statusMessage = "Restoring emergency local data..."
+            statusMessage = "Decrypting and restoring station database..."
             coroutineScope.launch(Dispatchers.IO) {
                 try {
-                    val jsonString = context.contentResolver.openInputStream(uri)?.use { input ->
-                        input.bufferedReader().use { it.readText() }
-                    } ?: throw Exception("Could not read backup file.")
+                    val rawBytes = context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+                        ?: throw Exception("Could not read backup file.")
 
-                    val restoredRecords = Gson().fromJson(jsonString, Array<DailyFuelRecord>::class.java)
+                    val jsonString = if (passphrase.isNotBlank()) {
+                        decryptBytes(rawBytes, passphrase)
+                    } else {
+                        String(rawBytes, Charsets.UTF_8)
+                    }
+
+                    val backupObj = Gson().fromJson(jsonString, FullStationBackupData::class.java)
                     val db = FirebaseFirestore.getInstance()
 
-                    restoredRecords.forEach { rec ->
+                    // Restore Fuel Records
+                    backupObj.records.forEach { rec ->
                         db.collection("daily_fuel_records").document(rec.date).set(rec)
+                    }
+
+                    // Restore Expenses
+                    backupObj.expenses.forEach { exp ->
+                        db.collection("expenses").document(exp.id.toString()).set(exp)
+                    }
+
+                    // Restore Credit Records
+                    backupObj.credits.forEach { cred ->
+                        db.collection("credits").document(cred.id.toString()).set(cred)
                     }
 
                     withContext(Dispatchers.Main) {
                         isProcessing = false
-                        statusMessage = "Emergency restore complete (${restoredRecords.size} records restored)!"
-                        Toast.makeText(context, "Data restored successfully!", Toast.LENGTH_LONG).show()
-                        ActivityLogger.log(session, "restored ${restoredRecords.size} records via local emergency backup")
+                        statusMessage = "Restore Successful! Restored ${backupObj.records.size} Fuel Records, ${backupObj.expenses.size} Expenses & ${backupObj.credits.size} Credit Ledgers."
+                        Toast.makeText(context, "Database Restored Successfully!", Toast.LENGTH_LONG).show()
+                        ActivityLogger.log(session, "restored full database from encrypted local backup file")
                     }
                 } catch (e: Exception) {
                     withContext(Dispatchers.Main) {
                         isProcessing = false
-                        statusMessage = "Restore failed: ${e.message}"
-                        Toast.makeText(context, "Restore failed: ${e.message}", Toast.LENGTH_LONG).show()
+                        statusMessage = "Restore Failed: ${e.message ?: "Invalid password or corrupted file."}"
+                        Toast.makeText(context, "Restore Failed: ${e.message}", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -406,9 +455,50 @@ private fun LocalBackupScreen(
             IconButton(onClick = onBack) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
             }
-            Text("Local Emergency Backup & Restore", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            Text("Encrypted Emergency Backup", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
 
+        // Cipher Settings Card
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Icon(Icons.Default.Key, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                    Text("Archive Cipher Settings (AES-256)", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                }
+
+                OutlinedTextField(
+                    value = passphrase,
+                    onValueChange = { passphrase = it },
+                    label = { Text("AES-256 Passphrase (Optional)", fontSize = 11.sp) },
+                    placeholder = { Text("Leave blank for plain unencrypted backup", fontSize = 10.sp) },
+                    visualTransformation = if (passphraseVisible) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    trailingIcon = {
+                        IconButton(onClick = { passphraseVisible = !passphraseVisible }) {
+                            Icon(
+                                imageVector = if (passphraseVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                contentDescription = null
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Text(
+                    text = "If an AES-256 passphrase is set, the backup file will be encrypted before export and requires the same password to restore.",
+                    fontSize = 10.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+
+        // Backup & Restore Actions Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -419,12 +509,12 @@ private fun LocalBackupScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Text("Offline Emergency Tools", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    Text("Station Database Storage", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                 }
 
                 Text(
-                    text = "• Local Backup: Serializes all station fuel, shift, and variation records into a JSON file saved directly to your phone's 'Downloads' directory.\n• Local Restore: Select an emergency backup file from phone storage to restore station database states.",
-                    fontSize = 12.sp,
+                    text = "Full Station Data Included in Backup:\n• Daily Fuel & Shift Sales Records (${allRecords.size})\n• Daily Expenses (${allExpenses.size})\n• Credit / Customer Lend Ledgers (${allCredits.size})",
+                    fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
@@ -446,54 +536,110 @@ private fun LocalBackupScreen(
 
                 Button(
                     onClick = {
-                        if (allRecords.isNotEmpty()) {
-                            isProcessing = true
-                            statusMessage = "Creating local emergency backup..."
-                            coroutineScope.launch(Dispatchers.IO) {
-                                try {
-                                    val jsonString = Gson().toJson(allRecords)
-                                    val fileName = "NHFuel_Emergency_Backup_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.json"
-                                    val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
-                                    val destFile = File(downloadFolder, fileName)
-                                    destFile.writeText(jsonString)
+                        isProcessing = true
+                        statusMessage = "Creating encrypted full station backup..."
+                        coroutineScope.launch(Dispatchers.IO) {
+                            try {
+                                val fullBackup = FullStationBackupData(
+                                    records = allRecords,
+                                    expenses = allExpenses,
+                                    credits = allCredits
+                                )
+                                val jsonString = Gson().toJson(fullBackup)
+                                val jsonBytes = jsonString.toByteArray(Charsets.UTF_8)
 
-                                    withContext(Dispatchers.Main) {
-                                        isProcessing = false
-                                        statusMessage = "Backup created: Downloads/$fileName"
-                                        Toast.makeText(context, "Backup saved to Downloads folder!", Toast.LENGTH_LONG).show()
-                                        ActivityLogger.log(session, "created local emergency backup file ($fileName)")
-                                    }
-                                } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        isProcessing = false
-                                        statusMessage = "Backup failed: ${e.message}"
-                                    }
+                                val finalBytes = if (passphrase.isNotBlank()) {
+                                    encryptBytes(jsonBytes, passphrase)
+                                } else {
+                                    jsonBytes
+                                }
+
+                                val fileName = "NHFuel_Full_Backup_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())}.enc"
+                                val downloadFolder = android.os.Environment.getExternalStoragePublicDirectory(android.os.Environment.DIRECTORY_DOWNLOADS)
+                                val destFile = File(downloadFolder, fileName)
+                                destFile.writeBytes(finalBytes)
+
+                                withContext(Dispatchers.Main) {
+                                    isProcessing = false
+                                    statusMessage = "Backup Created & Saved: Downloads/$fileName"
+                                    Toast.makeText(context, "Full Backup saved to Downloads folder!", Toast.LENGTH_LONG).show()
+                                    ActivityLogger.log(session, "exported full station encrypted backup file ($fileName)")
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    isProcessing = false
+                                    statusMessage = "Backup Failed: ${e.message}"
                                 }
                             }
                         }
                     },
-                    enabled = !isProcessing && allRecords.isNotEmpty(),
+                    enabled = !isProcessing,
                     modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Icon(Icons.Default.Save, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Create & Export Local Backup", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Create Encrypted Full Backup", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
                 OutlinedButton(
-                    onClick = { restoreFilePickerLauncher.launch(arrayOf("*/*", "application/json")) },
+                    onClick = { restoreFilePickerLauncher.launch(arrayOf("*/*", "application/octet-stream")) },
                     enabled = !isProcessing,
                     modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Icon(Icons.Default.Restore, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(6.dp))
-                    Text("Restore Data From Backup File", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text("Restore Database From Backup File", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
             }
         }
 
         Spacer(Modifier.height(bottomInset + 8.dp))
     }
+}
+
+// ============================================================================
+// SCANAPP PBKDF2 + AES-256 CIPHER UTILITIES
+// ============================================================================
+private const val AES_SALT_MAGIC = "NHFUEL_SALT_V1"
+private const val AES_ITERATION_COUNT = 10000
+private const val AES_KEY_LENGTH = 256
+
+private fun deriveKey(passphrase: String, salt: ByteArray): SecretKeySpec {
+    val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+    val spec = PBEKeySpec(passphrase.toCharArray(), salt, AES_ITERATION_COUNT, AES_KEY_LENGTH)
+    val tmp = factory.generateSecret(spec)
+    return SecretKeySpec(tmp.encoded, "AES")
+}
+
+private fun encryptBytes(data: ByteArray, passphrase: String): ByteArray {
+    val salt = ByteArray(16)
+    val iv = ByteArray(16)
+    val random = SecureRandom()
+    random.nextBytes(salt)
+    random.nextBytes(iv)
+
+    val secretKey = deriveKey(passphrase, salt)
+    val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+    cipher.init(Cipher.ENCRYPT_MODE, secretKey, IvParameterSpec(iv))
+    val encrypted = cipher.doFinal(data)
+
+    // Layout: [Salt 16B] + [IV 16B] + [Encrypted Payload]
+    return salt + iv + encrypted
+}
+
+private fun decryptBytes(data: ByteArray, passphrase: String): String {
+    if (data.size < 32) throw Exception("Backup file is corrupted or incomplete.")
+
+    val salt = data.copyOfRange(0, 16)
+    val iv = data.copyOfRange(16, 32)
+    val encryptedPayload = data.copyOfRange(32, data.size)
+
+    val secretKey = deriveKey(passphrase, salt)
+    val cipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+    cipher.init(Cipher.DECRYPT_MODE, secretKey, IvParameterSpec(iv))
+    val decryptedBytes = cipher.doFinal(encryptedPayload)
+
+    return String(decryptedBytes, Charsets.UTF_8)
 }
 
 // ============================================================================

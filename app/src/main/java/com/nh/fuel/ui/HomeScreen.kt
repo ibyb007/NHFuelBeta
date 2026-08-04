@@ -1,9 +1,17 @@
 package com.nh.fuel.ui
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,6 +32,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -62,8 +71,31 @@ fun MainContainerScreen(
     var currentTimeString by remember { mutableStateOf("") }
     var showThemeMenu by remember { mutableStateOf(false) }
 
-    // Real-time Internet Connectivity Observer (from NetworkObserver.kt)
+    // Real-time Internet Connectivity Observer
     val isConnected by rememberIsNetworkConnected()
+
+    // Dynamic Header "Last Updated Time Ago" State
+    var timeAgoText by remember { mutableStateOf("") }
+    var showTimeAgoTicker by remember { mutableStateOf(false) }
+
+    LaunchedEffect(record.lastUpdatedTimestamp) {
+        if (record.lastUpdatedTimestamp > 0L) {
+            val diffMs = System.currentTimeMillis() - record.lastUpdatedTimestamp
+            val diffMins = (diffMs / (1000 * 60)).toInt()
+            val diffHours = diffMins / 60
+
+            timeAgoText = when {
+                diffMins < 1 -> "Updated just now"
+                diffMins < 60 -> "Updated ${diffMins}m ago"
+                diffHours < 24 -> "Updated ${diffHours}h ago"
+                else -> "Updated ${diffHours / 24}d ago"
+            }
+
+            showTimeAgoTicker = true
+            delay(5000) // Show for 5 seconds then disappear
+            showTimeAgoTicker = false
+        }
+    }
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -166,19 +198,35 @@ fun MainContainerScreen(
                         fontFamily = FontFamily.SansSerif,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    Text(
-                        text = currentTimeString,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = currentTimeString,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        // DYNAMIC TIME AGO TICKER
+                        AnimatedVisibility(
+                            visible = showTimeAgoTicker,
+                            enter = fadeIn(),
+                            exit = fadeOut()
+                        ) {
+                            Text(
+                                text = "• $timeAgoText",
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // NETWORK STATUS DOT INDICATOR (Green = Online, Red = Offline)
+                    // NETWORK STATUS DOT INDICATOR
                     Box(
                         modifier = Modifier
                             .size(10.dp)
@@ -394,7 +442,6 @@ fun HomeScreenContent(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    // Automatically pick initial active shift on date load
     val initialActiveShift = remember(record.date) {
         when {
             !record.shift1.isComplete -> 1
@@ -403,7 +450,6 @@ fun HomeScreenContent(
         }
     }
 
-    // Persists shift selection without resetting back to Shift 1 on every data change
     var selectedShiftTab by remember(record.date) { mutableIntStateOf(initialActiveShift) }
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showSaveFullDayDialog by remember { mutableStateOf(false) }
@@ -553,7 +599,8 @@ fun HomeScreenContent(
                             record.copy(
                                 petrolTotal = clampedVal,
                                 lastPetrolDipAmount = clampedVal,
-                                lastPetrolDipTime = nowStr
+                                lastPetrolDipTime = nowStr,
+                                lastUpdatedTimestamp = System.currentTimeMillis()
                             )
                         )
                     } else if (diff != 0.0) {
@@ -566,7 +613,8 @@ fun HomeScreenContent(
                                 lastPetrolVariationAmount = diff,
                                 lastPetrolVariationTime = nowStr,
                                 lastPetrolDipAmount = clampedVal,
-                                lastPetrolDipTime = nowStr
+                                lastPetrolDipTime = nowStr,
+                                lastUpdatedTimestamp = System.currentTimeMillis()
                             )
                         )
                     } else {
@@ -575,7 +623,8 @@ fun HomeScreenContent(
                             record.copy(
                                 petrolTotal = max(0.0, requiredTotal),
                                 lastPetrolDipAmount = clampedVal,
-                                lastPetrolDipTime = nowStr
+                                lastPetrolDipTime = nowStr,
+                                lastUpdatedTimestamp = System.currentTimeMillis()
                             )
                         )
                     }
@@ -588,7 +637,8 @@ fun HomeScreenContent(
                             lastPetrolVariationAmount = 0.0,
                             lastPetrolVariationTime = "",
                             lastPetrolDipAmount = 0.0,
-                            lastPetrolDipTime = ""
+                            lastPetrolDipTime = "",
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
                     )
                 },
@@ -600,7 +650,8 @@ fun HomeScreenContent(
                     onRecordChanged(
                         record.copy(
                             petrolRefill = newRefill,
-                            lastPetrolRefill = RefillEvent(amount = validAdded, timestamp = nowStr)
+                            lastPetrolRefill = RefillEvent(amount = validAdded, timestamp = nowStr),
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
                     )
                 },
@@ -610,7 +661,8 @@ fun HomeScreenContent(
                     onRecordChanged(
                         record.copy(
                             petrolRefill = max(0.0, record.petrolRefill - lastAmount),
-                            lastPetrolRefill = RefillEvent()
+                            lastPetrolRefill = RefillEvent(),
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
                     )
                 }
@@ -642,7 +694,8 @@ fun HomeScreenContent(
                             record.copy(
                                 dieselTotal = clampedVal,
                                 lastDieselDipAmount = clampedVal,
-                                lastDieselDipTime = nowStr
+                                lastDieselDipTime = nowStr,
+                                lastUpdatedTimestamp = System.currentTimeMillis()
                             )
                         )
                     } else if (diff != 0.0) {
@@ -655,7 +708,8 @@ fun HomeScreenContent(
                                 lastDieselVariationAmount = diff,
                                 lastDieselVariationTime = nowStr,
                                 lastDieselDipAmount = clampedVal,
-                                lastDieselDipTime = nowStr
+                                lastDieselDipTime = nowStr,
+                                lastUpdatedTimestamp = System.currentTimeMillis()
                             )
                         )
                     } else {
@@ -664,7 +718,8 @@ fun HomeScreenContent(
                             record.copy(
                                 dieselTotal = max(0.0, requiredTotal),
                                 lastDieselDipAmount = clampedVal,
-                                lastDieselDipTime = nowStr
+                                lastDieselDipTime = nowStr,
+                                lastUpdatedTimestamp = System.currentTimeMillis()
                             )
                         )
                     }
@@ -677,7 +732,8 @@ fun HomeScreenContent(
                             lastDieselVariationAmount = 0.0,
                             lastDieselVariationTime = "",
                             lastDieselDipAmount = 0.0,
-                            lastDieselDipTime = ""
+                            lastDieselDipTime = "",
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
                     )
                 },
@@ -689,7 +745,8 @@ fun HomeScreenContent(
                     onRecordChanged(
                         record.copy(
                             dieselRefill = newRefill,
-                            lastDieselRefill = RefillEvent(amount = validAdded, timestamp = nowStr)
+                            lastDieselRefill = RefillEvent(amount = validAdded, timestamp = nowStr),
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
                     )
                 },
@@ -699,7 +756,8 @@ fun HomeScreenContent(
                     onRecordChanged(
                         record.copy(
                             dieselRefill = max(0.0, record.dieselRefill - lastAmount),
-                            lastDieselRefill = RefillEvent()
+                            lastDieselRefill = RefillEvent(),
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
                     )
                 }
@@ -824,7 +882,7 @@ fun HomeScreenContent(
                                 dieselN4 = record.shift2.mpd2.dieselN4.copy(open = s2Mpd2D4)
                             )
                         )
-                        record.copy(shift1 = updatedShift, shift2 = updatedShift2)
+                        record.copy(shift1 = updatedShift, shift2 = updatedShift2, lastUpdatedTimestamp = System.currentTimeMillis())
                     }
                     2 -> {
                         val s3Mpd1P2 = if (updatedShift.mpd1.petrolN2.isClosed) updatedShift.mpd1.petrolN2.close else record.shift3.mpd1.petrolN2.open
@@ -851,11 +909,12 @@ fun HomeScreenContent(
                                 dieselN4 = record.shift3.mpd2.dieselN4.copy(open = s3Mpd2D4)
                             )
                         )
-                        record.copy(shift2 = updatedShift, shift3 = updatedShift3)
+                        record.copy(shift2 = updatedShift, shift3 = updatedShift3, lastUpdatedTimestamp = System.currentTimeMillis())
                     }
-                    else -> record.copy(shift3 = updatedShift)
+                    else -> record.copy(shift3 = updatedShift, lastUpdatedTimestamp = System.currentTimeMillis())
                 }
                 onRecordChanged(newRecord)
+                ActivityLogger.log(session, "updated Shift $selectedShiftTab readings for ${record.date}")
             }
         )
 
@@ -1090,12 +1149,14 @@ fun HomeScreenContent(
                             lastDieselDipTime = record.lastDieselDipTime,
                             petrolPrice = record.petrolPrice,
                             dieselPrice = record.dieselPrice,
-                            shift1 = nextDayShift1
+                            shift1 = nextDayShift1,
+                            lastUpdatedTimestamp = System.currentTimeMillis()
                         )
 
                         onRecordChanged(record)
                         onRecordChanged(newNextDayRecord)
                         onDateSelected(nextDateStr)
+                        ActivityLogger.log(session, "finalized full day sales for ${record.date}")
                     }
                 ) {
                     Text("Confirm & Save", fontWeight = FontWeight.Bold)
@@ -1654,7 +1715,7 @@ fun NozzleRow(
             NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(open = it)) }
             NumberField("Close", nozzle.close, openValue = nozzle.open, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(close = it)) }
 
-            // UNDO RESET BUTTON
+            // UNDO RESET BUTTON (Restored directly on nozzle row)
             if (nozzle.isReset && canEdit) {
                 IconButton(
                     onClick = onUndoReset,

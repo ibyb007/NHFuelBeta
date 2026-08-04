@@ -137,12 +137,8 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Column(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
                 Spacer(Modifier.height(topInset + 4.dp))
 
                 Text(
@@ -288,15 +284,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // DEVELOPER ANIMATED CREDIT SECTION
-                Spacer(Modifier.height(4.dp))
-                DeveloperCreditLine()
-                Spacer(Modifier.height(2.dp))
-                DeveloperInfoSection()
-            }
-
-            // Compact Bottom Nav Bar Opacity Bar & App Version Footer
-            Column {
+                // Nav Bar Opacity Card
                 Card(
                     modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -320,6 +308,17 @@ fun SettingsScreen(
                     }
                 }
 
+                // DEVELOPER ANIMATED CREDIT SECTION
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "App developed by:",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                DeveloperCreditLine()
+
                 // CENTER BOTTOM VERSION NUMBER
                 Box(
                     modifier = Modifier
@@ -336,7 +335,6 @@ fun SettingsScreen(
                 }
 
                 Spacer(Modifier.height(bottomInset + 8.dp))
-            }
         }
     }
 }
@@ -567,7 +565,7 @@ private fun DeveloperCreditLine() {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 58.dp)
+            .heightIn(min = 72.dp)
             .padding(horizontal = 16.dp, vertical = 6.dp)
     ) {
         if (showTruck) {

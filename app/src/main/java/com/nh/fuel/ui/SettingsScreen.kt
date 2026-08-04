@@ -17,6 +17,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -306,8 +307,8 @@ private fun HardwareMaintenanceScreen(
     var selectedMpd by remember { mutableStateOf("MPD 1") }
     var selectedNozzle by remember { mutableStateOf("Petrol N2") }
 
-    // Live fetching current recorded open reading of selected nozzle
-    val currentReading = remember(currentRecord, selectedShift, selectedMpd, selectedNozzle) {
+    // Live fetching selected nozzle object
+    val selectedNozzleObj = remember(currentRecord, selectedShift, selectedMpd, selectedNozzle) {
         val shiftObj = when (selectedShift) {
             1 -> currentRecord.shift1
             2 -> currentRecord.shift2
@@ -315,16 +316,17 @@ private fun HardwareMaintenanceScreen(
         }
         val dispenser = if (selectedMpd == "MPD 1") shiftObj.mpd1 else shiftObj.mpd2
         when (selectedNozzle) {
-            "Petrol N2" -> dispenser.petrolN2.open
-            "Petrol N3" -> dispenser.petrolN3.open
-            "Diesel N1" -> dispenser.dieselN1.open
-            else -> dispenser.dieselN4.open
+            "Petrol N2" -> dispenser.petrolN2
+            "Petrol N3" -> dispenser.petrolN3
+            "Diesel N1" -> dispenser.dieselN1
+            else -> dispenser.dieselN4
         }
     }
 
+    val currentReading = selectedNozzleObj.open
     var newOpenValueInput by remember(currentReading) { mutableStateOf(currentReading.toString()) }
     var showConfirmDialog by remember { mutableStateOf(false) }
-    var countdown by remember { mutableIntStateOf(5) } // 5 Seconds Countdown
+    var countdown by remember { mutableIntStateOf(5) }
 
     LaunchedEffect(showConfirmDialog) {
         if (showConfirmDialog) {
@@ -401,7 +403,12 @@ private fun HardwareMaintenanceScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("Current Recorded Open Reading:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Text("$currentReading L", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("$currentReading L", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                        if (selectedNozzleObj.isReset) {
+                            Text("•R", color = Color(0xFFC62828), fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+                        }
+                    }
                 }
 
                 OutlinedTextField(
@@ -422,6 +429,23 @@ private fun HardwareMaintenanceScreen(
                 ) {
                     Text("Apply Hardware Nozzle Reset", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
+
+                // UNDO RESET BUTTON INSIDE MAINTENANCE SCREEN
+                if (selectedNozzleObj.isReset) {
+                    OutlinedButton(
+                        onClick = {
+                            val updatedRecord = applyNozzleUndoReset(currentRecord, selectedShift, selectedMpd, selectedNozzle)
+                            onRecordChanged(updatedRecord)
+                            ActivityLogger.log(session, "undid nozzle reset for $selectedMpd $selectedNozzle (Shift $selectedShift)")
+                        },
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth().height(42.dp)
+                    ) {
+                        Icon(Icons.Default.Undo, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(Modifier.width(6.dp))
+                        Text("Undo Last Reset (Restore ${selectedNozzleObj.originalOpenBeforeReset} L)", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                }
             }
         }
 
@@ -435,7 +459,7 @@ private fun HardwareMaintenanceScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("Resetting $selectedMpd $selectedNozzle (Shift $selectedShift) on ${currentRecord.date} to $newOpenValueInput L.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("• Previous shift/day readings will NOT be altered.\n• A RED 'RESET' badge will mark this nozzle for Shift $selectedShift.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("• Previous shift/day readings will NOT be altered.\n• A RED '•R' indicator will mark this nozzle's open box.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
@@ -482,6 +506,44 @@ fun applyNozzleReset(
             "Petrol N3" -> dispenser.copy(petrolN3 = updateNozzle(dispenser.petrolN3))
             "Diesel N1" -> dispenser.copy(dieselN1 = updateNozzle(dispenser.dieselN1))
             "Diesel N4" -> dispenser.copy(dieselN4 = updateNozzle(dispenser.dieselN4))
+            else -> dispenser
+        }
+    }
+
+    fun updateShift(shift: DayShift): DayShift {
+        return if (mpdName == "MPD 1") {
+            shift.copy(mpd1 = updateDispenser(shift.mpd1))
+        } else {
+            shift.copy(mpd2 = updateDispenser(shift.mpd2))
+        }
+    }
+
+    return when (shiftNumber) {
+        1 -> record.copy(shift1 = updateShift(record.shift1), lastUpdatedTimestamp = System.currentTimeMillis())
+        2 -> record.copy(shift2 = updateShift(record.shift2), lastUpdatedTimestamp = System.currentTimeMillis())
+        else -> record.copy(shift3 = updateShift(record.shift3), lastUpdatedTimestamp = System.currentTimeMillis())
+    }
+}
+
+fun applyNozzleUndoReset(
+    record: DailyFuelRecord,
+    shiftNumber: Int,
+    mpdName: String,
+    nozzleKey: String
+): DailyFuelRecord {
+    fun revertNozzle(nozzle: NozzleShift): NozzleShift {
+        return nozzle.copy(
+            open = if (nozzle.originalOpenBeforeReset > 0.0) nozzle.originalOpenBeforeReset else nozzle.open,
+            isReset = false
+        )
+    }
+
+    fun updateDispenser(dispenser: DispenserShift): DispenserShift {
+        return when (nozzleKey) {
+            "Petrol N2" -> dispenser.copy(petrolN2 = revertNozzle(dispenser.petrolN2))
+            "Petrol N3" -> dispenser.copy(petrolN3 = revertNozzle(dispenser.petrolN3))
+            "Diesel N1" -> dispenser.copy(dieselN1 = revertNozzle(dispenser.dieselN1))
+            "Diesel N4" -> dispenser.copy(dieselN4 = revertNozzle(dispenser.dieselN4))
             else -> dispenser
         }
     }

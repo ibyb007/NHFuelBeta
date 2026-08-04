@@ -1551,20 +1551,51 @@ fun DispenserShiftCard(
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Petrol (N2, N3)", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 11.sp)
-                    NozzleRow("N2", dispenser.petrolN2, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(petrolN2 = updated)) }
-                    NozzleRow("N3", dispenser.petrolN3, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(petrolN3 = updated)) }
+                    
+                    NozzleRow(
+                        nozzleLabel = "N2",
+                        nozzle = dispenser.petrolN2,
+                        showTestingField = showTestingFields,
+                        canEdit = canEdit,
+                        onChange = { updated -> onUpdate(dispenser.copy(petrolN2 = updated)) },
+                        onUndoReset = { onUpdate(dispenser.copy(petrolN2 = dispenser.petrolN2.copy(open = dispenser.petrolN2.originalOpenBeforeReset, isReset = false))) }
+                    )
+                    
+                    NozzleRow(
+                        nozzleLabel = "N3",
+                        nozzle = dispenser.petrolN3,
+                        showTestingField = showTestingFields,
+                        canEdit = canEdit,
+                        onChange = { updated -> onUpdate(dispenser.copy(petrolN3 = updated)) },
+                        onUndoReset = { onUpdate(dispenser.copy(petrolN3 = dispenser.petrolN3.copy(open = dispenser.petrolN3.originalOpenBeforeReset, isReset = false))) }
+                    )
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Diesel (N1, N4)", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 11.sp)
-                    NozzleRow("N1", dispenser.dieselN1, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(dieselN1 = updated)) }
-                    NozzleRow("N4", dispenser.dieselN4, showTestingFields, canEdit) { updated -> onUpdate(dispenser.copy(dieselN4 = updated)) }
+                    
+                    NozzleRow(
+                        nozzleLabel = "N1",
+                        nozzle = dispenser.dieselN1,
+                        showTestingField = showTestingFields,
+                        canEdit = canEdit,
+                        onChange = { updated -> onUpdate(dispenser.copy(dieselN1 = updated)) },
+                        onUndoReset = { onUpdate(dispenser.copy(dieselN1 = dispenser.dieselN1.copy(open = dispenser.dieselN1.originalOpenBeforeReset, isReset = false))) }
+                    )
+                    
+                    NozzleRow(
+                        nozzleLabel = "N4",
+                        nozzle = dispenser.dieselN4,
+                        showTestingField = showTestingFields,
+                        canEdit = canEdit,
+                        onChange = { updated -> onUpdate(dispenser.copy(dieselN4 = updated)) },
+                        onUndoReset = { onUpdate(dispenser.copy(dieselN4 = dispenser.dieselN4.copy(open = dispenser.dieselN4.originalOpenBeforeReset, isReset = false))) }
+                    )
                 }
             }
         }
     }
 }
-
 @Composable
 fun NozzleRow(
     nozzleLabel: String,

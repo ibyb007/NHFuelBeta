@@ -1,5 +1,6 @@
 package com.nh.fuel.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -65,13 +66,15 @@ fun SettingsScreen(
     val canAccessAdminPanel = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
     val isSuperAdmin = session.isOwnerLogin || session.role == Role.SUPER_ADMIN
 
-    if (showStaffManagementPage && canAccessAdminPanel) {
+    if (showStaffManagementPage) {
+        BackHandler { showStaffManagementPage = false }
         StaffManagementScreen(
             onBack = { showStaffManagementPage = false },
             topInset = topInset,
             bottomInset = bottomInset
         )
     } else if (showMaintenancePage && isSuperAdmin) {
+        BackHandler { showMaintenancePage = false }
         HardwareMaintenanceScreen(
             session = session,
             currentRecord = currentRecord,
@@ -81,6 +84,7 @@ fun SettingsScreen(
             bottomInset = bottomInset
         )
     } else if (showActivityLogPage) {
+        BackHandler { showActivityLogPage = false }
         ActivityLogScreen(
             session = session,
             onBack = { showActivityLogPage = false },
@@ -142,7 +146,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Staff Access & Roles Navigation Card
+                // Staff Access Card
                 if (canAccessAdminPanel) {
                     Card(
                         modifier = Modifier
@@ -165,7 +169,6 @@ fun SettingsScreen(
                                     Text("Tap to manage staff keys, roles & privileges", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
-
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
@@ -211,7 +214,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Super Admin Hardware Maintenance Mode (Placed below Activity Logs)
+                // Super Admin Hardware Maintenance Mode
                 if (isSuperAdmin) {
                     Card(
                         modifier = Modifier
@@ -234,7 +237,6 @@ fun SettingsScreen(
                                     Text("Reset hardware meter readings for pump recalibration", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                             }
-
                             Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.error)
                         }
                     }
@@ -307,24 +309,23 @@ private fun HardwareMaintenanceScreen(
     var selectedMpd by remember { mutableStateOf("MPD 1") }
     var selectedNozzle by remember { mutableStateOf("Petrol N2") }
 
-    // Live fetching selected nozzle object
-    val selectedNozzleObj = remember(currentRecord, selectedShift, selectedMpd, selectedNozzle) {
-        val shiftObj = when (selectedShift) {
-            1 -> currentRecord.shift1
-            2 -> currentRecord.shift2
-            else -> currentRecord.shift3
-        }
-        val dispenser = if (selectedMpd == "MPD 1") shiftObj.mpd1 else shiftObj.mpd2
-        when (selectedNozzle) {
-            "Petrol N2" -> dispenser.petrolN2
-            "Petrol N3" -> dispenser.petrolN3
-            "Diesel N1" -> dispenser.dieselN1
-            else -> dispenser.dieselN4
-        }
+    val activeShiftObj = when (selectedShift) {
+        1 -> currentRecord.shift1
+        2 -> currentRecord.shift2
+        else -> currentRecord.shift3
+    }
+    val activeDispenser = if (selectedMpd == "MPD 1") activeShiftObj.mpd1 else activeShiftObj.mpd2
+    val selectedNozzleObj = when (selectedNozzle) {
+        "Petrol N2" -> activeDispenser.petrolN2
+        "Petrol N3" -> activeDispenser.petrolN3
+        "Diesel N1" -> activeDispenser.dieselN1
+        else -> activeDispenser.dieselN4
     }
 
     val currentReading = selectedNozzleObj.open
-    var newOpenValueInput by remember(currentReading) { mutableStateOf(currentReading.toString()) }
+    var newOpenValueInput by remember(currentReading, selectedShift, selectedMpd, selectedNozzle) {
+        mutableStateOf(currentReading.toString())
+    }
     var showConfirmDialog by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(5) }
 
@@ -423,14 +424,11 @@ private fun HardwareMaintenanceScreen(
                 Button(
                     onClick = { showConfirmDialog = true },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(44.dp)
+                    modifier = Modifier.fillMaxWidth().height(44.dp)
                 ) {
                     Text("Apply Hardware Nozzle Reset", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 }
 
-                // UNDO RESET BUTTON INSIDE MAINTENANCE SCREEN
                 if (selectedNozzleObj.isReset) {
                     OutlinedButton(
                         onClick = {

@@ -1,5 +1,10 @@
 package com.nh.fuel.ui
 
+import android.content.Context
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
@@ -11,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -23,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -36,6 +43,44 @@ import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import kotlin.math.max
+
+// --- NETWORK OBSERVER HELPER ---
+@Composable
+fun rememberIsNetworkConnected(): State<Boolean> {
+    val context = LocalContext.current
+    return produceState(initialValue = isCurrentlyConnected(context)) {
+        val connectivityManager =
+            context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+
+        val callback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) {
+                value = true
+            }
+
+            override fun onLost(network: Network) {
+                value = false
+            }
+        }
+
+        val request = NetworkRequest.Builder()
+            .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+            .build()
+
+        connectivityManager.registerNetworkCallback(request, callback)
+
+        awaitDispose {
+            connectivityManager.unregisterNetworkCallback(callback)
+        }
+    }
+}
+
+private fun isCurrentlyConnected(context: Context): Boolean {
+    val connectivityManager =
+        context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    val activeNetwork = connectivityManager.activeNetwork ?: return false
+    val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+    return capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -60,6 +105,9 @@ fun MainContainerScreen(
     var selectedMainTab by remember { mutableStateOf(0) }
     var currentTimeString by remember { mutableStateOf("") }
     var showThemeMenu by remember { mutableStateOf(false) }
+
+    // Real-time Internet Connectivity Observer
+    val isConnected by rememberIsNetworkConnected()
 
     LaunchedEffect(Unit) {
         while (true) {
@@ -119,20 +167,19 @@ fun MainContainerScreen(
                     topInset = topInset,
                     bottomInset = bottomInset
                 )
-                
-4 -> SettingsScreen(
-    session = session,
-    currentRecord = record,         // <--- PASS CURRENT DAILY RECORD
-    allRecords = allRecords,        // <--- PASS ALL RECORDS
-    currentOpacity = navBarOpacity,
-    currentThemeMode = themeMode,
-    onOpacityChanged = onOpacityChanged,
-    onThemeModeChanged = onThemeModeChanged,
-    onRecordChanged = onRecordChanged, // <--- PASS SAVE CALLBACK
-    onLogout = onLogout,
-    topInset = topInset,
-    bottomInset = bottomInset
-)
+                4 -> SettingsScreen(
+                    session = session,
+                    currentRecord = record,
+                    allRecords = allRecords,
+                    currentOpacity = navBarOpacity,
+                    currentThemeMode = themeMode,
+                    onOpacityChanged = onOpacityChanged,
+                    onThemeModeChanged = onThemeModeChanged,
+                    onRecordChanged = onRecordChanged,
+                    onLogout = onLogout,
+                    topInset = topInset,
+                    bottomInset = bottomInset
+                )
             }
         }
 
@@ -171,67 +218,81 @@ fun MainContainerScreen(
                     )
                 }
 
-                Box {
-                    IconButton(
-                        onClick = { showThemeMenu = true },
-                        modifier = Modifier.size(32.dp)
-                    ) {
-                        Icon(
-                            imageVector = when (themeMode) {
-                                ThemeMode.LIGHT -> Icons.Default.LightMode
-                                ThemeMode.DARK -> Icons.Default.DarkMode
-                                ThemeMode.AUTO -> Icons.Default.BrightnessAuto
-                            },
-                            contentDescription = "Theme Switcher",
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // NETWORK STATUS DOT INDICATOR (Green = Online, Red = Offline)
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(if (isConnected) Color(0xFF2E7D32) else Color(0xFFC62828))
+                    )
 
-                    DropdownMenu(
-                        expanded = showThemeMenu,
-                        onDismissRequest = { showThemeMenu = false }
-                    ) {
-                        Text(
-                            text = "Appearance",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Light", fontSize = 13.sp) },
-                            leadingIcon = { Icon(Icons.Default.LightMode, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            trailingIcon = if (themeMode == ThemeMode.LIGHT) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null,
-                            onClick = {
-                                onThemeModeChanged(ThemeMode.LIGHT)
-                                showThemeMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Dark", fontSize = 13.sp) },
-                            leadingIcon = { Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            trailingIcon = if (themeMode == ThemeMode.DARK) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null,
-                            onClick = {
-                                onThemeModeChanged(ThemeMode.DARK)
-                                showThemeMenu = false
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Auto (system default)", fontSize = 13.sp) },
-                            leadingIcon = { Icon(Icons.Default.BrightnessAuto, contentDescription = null, modifier = Modifier.size(18.dp)) },
-                            trailingIcon = if (themeMode == ThemeMode.AUTO) {
-                                { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
-                            } else null,
-                            onClick = {
-                                onThemeModeChanged(ThemeMode.AUTO)
-                                showThemeMenu = false
-                            }
-                        )
+                    // THEME SWITCHER
+                    Box {
+                        IconButton(
+                            onClick = { showThemeMenu = true },
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = when (themeMode) {
+                                    ThemeMode.LIGHT -> Icons.Default.LightMode
+                                    ThemeMode.DARK -> Icons.Default.DarkMode
+                                    ThemeMode.AUTO -> Icons.Default.BrightnessAuto
+                                },
+                                contentDescription = "Theme Switcher",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        DropdownMenu(
+                            expanded = showThemeMenu,
+                            onDismissRequest = { showThemeMenu = false }
+                        ) {
+                            Text(
+                                text = "Appearance",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Light", fontSize = 13.sp) },
+                                leadingIcon = { Icon(Icons.Default.LightMode, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                trailingIcon = if (themeMode == ThemeMode.LIGHT) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                onClick = {
+                                    onThemeModeChanged(ThemeMode.LIGHT)
+                                    showThemeMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Dark", fontSize = 13.sp) },
+                                leadingIcon = { Icon(Icons.Default.DarkMode, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                trailingIcon = if (themeMode == ThemeMode.DARK) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                onClick = {
+                                    onThemeModeChanged(ThemeMode.DARK)
+                                    showThemeMenu = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Auto (system default)", fontSize = 13.sp) },
+                                leadingIcon = { Icon(Icons.Default.BrightnessAuto, contentDescription = null, modifier = Modifier.size(18.dp)) },
+                                trailingIcon = if (themeMode == ThemeMode.AUTO) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null,
+                                onClick = {
+                                    onThemeModeChanged(ThemeMode.AUTO)
+                                    showThemeMenu = false
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -377,7 +438,7 @@ fun HomeScreenContent(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    // Determine the active uncompleted shift automatically on initial load
+    // Automatically pick initial active shift on date load
     val initialActiveShift = remember(record.date) {
         when {
             !record.shift1.isComplete -> 1
@@ -386,7 +447,7 @@ fun HomeScreenContent(
         }
     }
 
-    // Persist selectedShiftTab state across tab switching and updates
+    // Persists shift selection without resetting back to Shift 1 on every data change
     var selectedShiftTab by remember(record.date) { mutableIntStateOf(initialActiveShift) }
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showSaveFullDayDialog by remember { mutableStateOf(false) }
@@ -416,6 +477,7 @@ fun HomeScreenContent(
         2 -> record.shift2
         else -> record.shift3
     }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -425,7 +487,6 @@ fun HomeScreenContent(
     ) {
         Spacer(Modifier.height(topInset + 4.dp))
 
-        // READ-ONLY / LOCK WARNING BANNER
         if (!canEditDate) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
@@ -1598,6 +1659,7 @@ fun DispenserShiftCard(
         }
     }
 }
+
 @Composable
 fun NozzleRow(
     nozzleLabel: String,
@@ -1616,7 +1678,7 @@ fun NozzleRow(
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
                 
-                // RED RESET BADGE FOR THE PARTICULAR SHIFT
+                // RED RESET BADGE
                 if (nozzle.isReset) {
                     Surface(
                         color = Color(0xFFC62828),
@@ -1684,6 +1746,7 @@ fun NozzleRow(
         }
     }
 }
+
 @Composable
 fun NumberField(
     label: String,

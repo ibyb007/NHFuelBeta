@@ -5,6 +5,7 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.Keep
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
@@ -54,6 +55,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 import com.nh.fuel.BuildConfig
 import com.nh.fuel.data.ActivityLogger
 import com.nh.fuel.data.AppUserSession
@@ -84,6 +86,7 @@ import javax.crypto.spec.SecretKeySpec
 import kotlin.math.roundToInt
 import kotlin.random.Random
 
+@Keep
 data class FullStationBackupData(
     val records: List<DailyFuelRecord> = emptyList(),
     val expenses: List<ExpenseItem> = emptyList(),
@@ -157,12 +160,12 @@ fun SettingsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 12.dp),
-            verticalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 12.dp)
         ) {
             Column(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Spacer(Modifier.height(topInset + 4.dp))
@@ -310,37 +313,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // DEVELOPER ANIMATED CREDIT SECTION
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text = "App developed by:",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-                DeveloperCreditLine()
-
-                // CENTER BOTTOM DYNAMIC APP VERSION NUMBER
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = 8.dp, bottom = 4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = "Version: ${BuildConfig.VERSION_NAME}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                    )
-                }
-
-                Spacer(Modifier.height(bottomInset + 8.dp))
-            }
-
-            // Compact Bottom Nav Bar Opacity Bar
-            Column {
+                // Nav Bar Opacity Card (PLACED ABOVE DEVELOPER ANIMATION)
                 Card(
                     modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -363,7 +336,36 @@ fun SettingsScreen(
                         Text("${(sliderValue * 100).roundToInt()}%", fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
                     }
                 }
-                Spacer(Modifier.height(bottomInset + 8.dp))
+
+                // DEVELOPER ANIMATED CREDIT SECTION INSIDE SCROLLABLE AREA
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "App developed by:",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                DeveloperCreditLine()
+                Spacer(Modifier.height(2.dp))
+                DeveloperInfoSection()
+
+                Spacer(Modifier.height(8.dp))
+            }
+
+            // CENTER BOTTOM VERSION NUMBER
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp, bottom = bottomInset + 4.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "Version: ${BuildConfig.VERSION_NAME}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
             }
         }
     }
@@ -408,7 +410,8 @@ private fun LocalBackupScreen(
                         String(rawBytes, Charsets.UTF_8)
                     }
 
-                    val backupObj = Gson().fromJson(jsonString, FullStationBackupData::class.java)
+                    val backupType = object : TypeToken<FullStationBackupData>() {}.type
+                    val backupObj: FullStationBackupData = Gson().fromJson(jsonString, backupType)
                     val db = FirebaseFirestore.getInstance()
 
                     // Restore Fuel Records
@@ -601,7 +604,6 @@ private fun LocalBackupScreen(
 // ============================================================================
 // SCANAPP PBKDF2 + AES-256 CIPHER UTILITIES
 // ============================================================================
-private const val AES_SALT_MAGIC = "NHFUEL_SALT_V1"
 private const val AES_ITERATION_COUNT = 10000
 private const val AES_KEY_LENGTH = 256
 
@@ -624,7 +626,6 @@ private fun encryptBytes(data: ByteArray, passphrase: String): ByteArray {
     cipher.init(Cipher.ENCRYPT_MODE, secretKey, IvParameterSpec(iv))
     val encrypted = cipher.doFinal(data)
 
-    // Layout: [Salt 16B] + [IV 16B] + [Encrypted Payload]
     return salt + iv + encrypted
 }
 

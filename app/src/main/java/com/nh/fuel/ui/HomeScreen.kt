@@ -373,7 +373,17 @@ fun HomeScreenContent(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    var selectedShiftTab by remember { mutableStateOf(1) }
+    // Determine the active uncompleted shift automatically on initial load
+    val initialActiveShift = remember(record.date) {
+        when {
+            !record.shift1.isComplete -> 1
+            !record.shift2.isComplete -> 2
+            else -> 3
+        }
+    }
+
+    // Persist selectedShiftTab state across tab switching and updates
+    var selectedShiftTab by remember(record.date) { mutableIntStateOf(initialActiveShift) }
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showSaveFullDayDialog by remember { mutableStateOf(false) }
     var showTestingInputRow by remember { mutableStateOf(false) }
@@ -386,21 +396,10 @@ fun HomeScreenContent(
 
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-    // Strict Permission Guard:
-    // Owners/Admins ALWAYS have edit rights.
-    // Managers are completely BLOCKED if:
-    // 1. session.isReadOnly is true
-    // 2. It is an unpermitted past date
-    // 3. The day is already finalized
     val canEditDate = if (isAdminOrOwner) {
         true
     } else {
         !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
-    }
-
-    LaunchedEffect(record.date) {
-        selectedShiftTab = 1
-        showTestingInputRow = false
     }
 
     val isDark = isSystemInDarkTheme()
@@ -413,7 +412,6 @@ fun HomeScreenContent(
         2 -> record.shift2
         else -> record.shift3
     }
-
     Column(
         modifier = Modifier
             .fillMaxSize()

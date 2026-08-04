@@ -2,6 +2,7 @@ package com.nh.fuel
 
 import android.graphics.Color
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
@@ -260,7 +261,11 @@ class MainActivity : ComponentActivity() {
                         onRecordChanged = { updatedRecord ->
                             if (!activeSession.isReadOnly) {
                                 coroutineScope.launch {
-                                    firestoreRepository.saveFuelRecord(updatedRecord)
+                                    try {
+                                        firestoreRepository.saveFuelRecord(updatedRecord)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Failed to save record: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
@@ -280,28 +285,44 @@ class MainActivity : ComponentActivity() {
                         onAddOrUpdateExpense = { expenseItem ->
                             if (!activeSession.isReadOnly) {
                                 coroutineScope.launch {
-                                    firestoreRepository.saveExpense(expenseItem)
+                                    try {
+                                        firestoreRepository.saveExpense(expenseItem)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Failed to save expense: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
                         onDeleteExpense = { expenseItem ->
                             if (!activeSession.isReadOnly) {
                                 coroutineScope.launch {
-                                    firestoreRepository.deleteExpense(expenseItem)
+                                    try {
+                                        firestoreRepository.deleteExpense(expenseItem)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Failed to delete expense: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
                         onAddOrUpdateCredit = { creditRecord ->
                             if (!activeSession.isReadOnly) {
                                 coroutineScope.launch {
-                                    firestoreRepository.saveCredit(creditRecord)
+                                    try {
+                                        firestoreRepository.saveCredit(creditRecord)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Failed to save credit ledger: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },
                         onDeleteCredit = { creditRecord ->
                             if (!activeSession.isReadOnly) {
                                 coroutineScope.launch {
-                                    firestoreRepository.deleteCredit(creditRecord)
+                                    try {
+                                        firestoreRepository.deleteCredit(creditRecord)
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Failed to delete credit ledger: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
                                 }
                             }
                         },

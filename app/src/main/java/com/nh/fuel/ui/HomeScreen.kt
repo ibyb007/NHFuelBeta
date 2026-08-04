@@ -67,7 +67,7 @@ fun MainContainerScreen(
     onDeleteCredit: (CreditRecord) -> Unit = {},
     onLogout: () -> Unit = {}
 ) {
-    var selectedMainTab by remember { mutableStateOf(0) }
+    var selectedMainTab by remember { mutableIntStateOf(0) }
     var currentTimeString by remember { mutableStateOf("") }
     var showThemeMenu by remember { mutableStateOf(false) }
 
@@ -442,15 +442,17 @@ fun HomeScreenContent(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    val initialActiveShift = remember(record.date) {
-        when {
-            !record.shift1.isComplete -> 1
-            !record.shift2.isComplete -> 2
-            else -> 3
-        }
+    // FIX: Dynamically auto-resume on whichever shift is currently active & uncompleted
+    var selectedShiftTab by remember(record.date) {
+        mutableIntStateOf(
+            when {
+                !record.shift1.isComplete -> 1
+                !record.shift2.isComplete -> 2
+                else -> 3
+            }
+        )
     }
 
-    var selectedShiftTab by remember(record.date) { mutableIntStateOf(initialActiveShift) }
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showSaveFullDayDialog by remember { mutableStateOf(false) }
     var showTestingInputRow by remember { mutableStateOf(false) }
@@ -1620,57 +1622,23 @@ fun DispenserShiftCard(
     onUpdate: (DispenserShift) -> Unit
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
+        modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Text(dispenserTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(dispenserTitle, fontWeight = FontWeight.Bold, fontSize = 14.sp)
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Petrol (N2, N3)", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 11.sp)
-                    
-                    NozzleRow(
-                        nozzleLabel = "N2",
-                        nozzle = dispenser.petrolN2,
-                        showTestingField = showTestingFields,
-                        canEdit = canEdit,
-                        onChange = { updated -> onUpdate(dispenser.copy(petrolN2 = updated)) },
-                        onUndoReset = { onUpdate(dispenser.copy(petrolN2 = dispenser.petrolN2.copy(open = dispenser.petrolN2.originalOpenBeforeReset, isReset = false))) }
-                    )
-                    
-                    NozzleRow(
-                        nozzleLabel = "N3",
-                        nozzle = dispenser.petrolN3,
-                        showTestingField = showTestingFields,
-                        canEdit = canEdit,
-                        onChange = { updated -> onUpdate(dispenser.copy(petrolN3 = updated)) },
-                        onUndoReset = { onUpdate(dispenser.copy(petrolN3 = dispenser.petrolN3.copy(open = dispenser.petrolN3.originalOpenBeforeReset, isReset = false))) }
-                    )
+                    NozzleRow("N2", dispenser.petrolN2, showTestingFields, canEdit) { onUpdate(dispenser.copy(petrolN2 = it)) }
+                    NozzleRow("N3", dispenser.petrolN3, showTestingFields, canEdit) { onUpdate(dispenser.copy(petrolN3 = it)) }
                 }
 
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Diesel (N1, N4)", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 11.sp)
-                    
-                    NozzleRow(
-                        nozzleLabel = "N1",
-                        nozzle = dispenser.dieselN1,
-                        showTestingField = showTestingFields,
-                        canEdit = canEdit,
-                        onChange = { updated -> onUpdate(dispenser.copy(dieselN1 = updated)) },
-                        onUndoReset = { onUpdate(dispenser.copy(dieselN1 = dispenser.dieselN1.copy(open = dispenser.dieselN1.originalOpenBeforeReset, isReset = false))) }
-                    )
-                    
-                    NozzleRow(
-                        nozzleLabel = "N4",
-                        nozzle = dispenser.dieselN4,
-                        showTestingField = showTestingFields,
-                        canEdit = canEdit,
-                        onChange = { updated -> onUpdate(dispenser.copy(dieselN4 = updated)) },
-                        onUndoReset = { onUpdate(dispenser.copy(dieselN4 = dispenser.dieselN4.copy(open = dispenser.dieselN4.originalOpenBeforeReset, isReset = false))) }
-                    )
+                    NozzleRow("N1", dispenser.dieselN1, showTestingFields, canEdit) { onUpdate(dispenser.copy(dieselN1 = it)) }
+                    NozzleRow("N4", dispenser.dieselN4, showTestingFields, canEdit) { onUpdate(dispenser.copy(dieselN4 = it)) }
                 }
             }
         }
@@ -1683,8 +1651,7 @@ fun NozzleRow(
     nozzle: NozzleShift,
     showTestingField: Boolean = false,
     canEdit: Boolean = true,
-    onChange: (NozzleShift) -> Unit,
-    onUndoReset: () -> Unit = {}
+    onChange: (NozzleShift) -> Unit
 ) {
     Column(modifier = Modifier.padding(vertical = 2.dp)) {
         Row(
@@ -1692,53 +1659,26 @@ fun NozzleRow(
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurface)
+            Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+
+            Column(modifier = Modifier.weight(1f)) {
+                NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset) { onChange(nozzle.copy(open = it)) }
                 
-                // RED RESET BADGE
+                // RED •R INDICATOR DIRECTLY BELOW OPEN VALUE BOX
                 if (nozzle.isReset) {
-                    Surface(
+                    Text(
+                        text = "•R",
                         color = Color(0xFFC62828),
-                        shape = RoundedCornerShape(3.dp)
-                    ) {
-                        Text(
-                            text = "RESET",
-                            color = Color.White,
-                            fontSize = 7.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            modifier = Modifier.padding(horizontal = 3.dp, vertical = 1.dp)
-                        )
-                    }
-                }
-            }
-
-            NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(open = it)) }
-            NumberField("Close", nozzle.close, openValue = nozzle.open, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(close = it)) }
-
-            // UNDO RESET BUTTON (Restored directly on nozzle row)
-            if (nozzle.isReset && canEdit) {
-                IconButton(
-                    onClick = onUndoReset,
-                    modifier = Modifier.size(24.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Undo,
-                        contentDescription = "Undo Nozzle Meter Reset",
-                        tint = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(14.dp)
+                        fontWeight = FontWeight.ExtraBold,
+                        fontSize = 11.sp,
+                        modifier = Modifier.padding(start = 2.dp, top = 1.dp)
                     )
                 }
             }
-        }
 
-        if (nozzle.isReset) {
-            Text(
-                text = "Meter reset applied. Original Open: ${nozzle.originalOpenBeforeReset} L",
-                fontSize = 8.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color(0xFFC62828),
-                modifier = Modifier.padding(start = 20.dp, top = 1.dp)
-            )
+            Column(modifier = Modifier.weight(1f)) {
+                NumberField("Close", nozzle.close, openValue = nozzle.open, enabled = canEdit) { onChange(nozzle.copy(close = it)) }
+            }
         }
 
         if (nozzle.testing > 0.0 && !showTestingField) {

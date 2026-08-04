@@ -18,6 +18,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -58,6 +59,7 @@ fun SettingsScreen(
 ) {
     var sliderValue by remember(currentOpacity) { mutableFloatStateOf(currentOpacity) }
     var showStaffManagementPage by remember { mutableStateOf(false) }
+    var showMaintenancePage by remember { mutableStateOf(false) }
 
     val canAccessAdminPanel = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
     val isSuperAdmin = session.isOwnerLogin || session.role == Role.SUPER_ADMIN
@@ -65,6 +67,14 @@ fun SettingsScreen(
     if (showStaffManagementPage && canAccessAdminPanel) {
         StaffManagementScreen(
             onBack = { showStaffManagementPage = false },
+            topInset = topInset,
+            bottomInset = bottomInset
+        )
+    } else if (showMaintenancePage && isSuperAdmin) {
+        HardwareMaintenanceScreen(
+            currentRecord = currentRecord,
+            onBack = { showMaintenancePage = false },
+            onRecordChanged = onRecordChanged,
             topInset = topInset,
             bottomInset = bottomInset
         )
@@ -123,14 +133,6 @@ fun SettingsScreen(
                     }
                 }
 
-                // Super Admin Hardware Maintenance Mode Tool
-                if (isSuperAdmin) {
-                    SuperAdminMaintenanceSection(
-                        currentRecord = currentRecord,
-                        onRecordChanged = onRecordChanged
-                    )
-                }
-
                 // Staff Access & Roles Navigation Card
                 if (canAccessAdminPanel) {
                     Card(
@@ -173,6 +175,35 @@ fun SettingsScreen(
                             Text("Cloud & Drive Backup", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                         }
                         Text("Automatic Google Drive cloud sync and one-click data restore.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                // Super Admin Hardware Maintenance Mode Navigation Tile (Placed below Cloud Backup)
+                if (isSuperAdmin) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.5f), RoundedCornerShape(10.dp))
+                            .clickable { showMaintenancePage = true },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.2f))
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.Build, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                Column {
+                                    Text("Super Admin Maintenance Mode", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onErrorContainer)
+                                    Text("Reset hardware meter readings for pump recalibration", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
+                            }
+
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.error)
+                        }
                     }
                 }
             }
@@ -229,62 +260,39 @@ fun SettingsScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SuperAdminMaintenanceSection(
+private fun HardwareMaintenanceScreen(
     currentRecord: DailyFuelRecord,
-    onRecordChanged: (DailyFuelRecord) -> Unit
+    onBack: () -> Unit,
+    onRecordChanged: (DailyFuelRecord) -> Unit,
+    topInset: Dp,
+    bottomInset: Dp
 ) {
-    var showMaintenanceModal by remember { mutableStateOf(false) }
-
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f))
-    ) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                Icon(Icons.Default.Build, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                Text("Super Admin Maintenance Mode", fontWeight = FontWeight.Bold, fontSize = 14.sp, color = MaterialTheme.colorScheme.onErrorContainer)
-            }
-            Text(
-                text = "Reset individual dispenser nozzle meter readings (e.g. meter replacement or mechanical repair) for ${currentRecord.date} without corrupting prior shift data.",
-                fontSize = 11.sp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Button(
-                onClick = { showMaintenanceModal = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                modifier = Modifier.fillMaxWidth().height(36.dp)
-            ) {
-                Text("Open Hardware Nozzle Reset Tool", fontWeight = FontWeight.Bold, fontSize = 12.sp)
-            }
-        }
-    }
-
-    if (showMaintenanceModal) {
-        NozzleResetModal(
-            currentRecord = currentRecord,
-            onDismiss = { showMaintenanceModal = false },
-            onConfirmReset = { shiftNum, mpd, nozzleKey, newOpen ->
-                val updatedRecord = applyNozzleReset(currentRecord, shiftNum, mpd, nozzleKey, newOpen)
-                onRecordChanged(updatedRecord)
-                showMaintenanceModal = false
-            }
-        )
-    }
-}
-
-@Composable
-private fun NozzleResetModal(
-    currentRecord: DailyFuelRecord,
-    onDismiss: () -> Unit,
-    onConfirmReset: (Int, String, String, Double) -> Unit
-) {
-    var selectedShift by remember { mutableStateOf(1) }
+    var selectedShift by remember { mutableIntStateOf(1) }
     var selectedMpd by remember { mutableStateOf("MPD 1") }
     var selectedNozzle by remember { mutableStateOf("Petrol N2") }
-    var newOpenValueInput by remember { mutableStateOf("0.0") }
+
+    // Dynamically retrieve current reading of whichever nozzle is selected
+    val currentReading = remember(currentRecord, selectedShift, selectedMpd, selectedNozzle) {
+        val shiftObj = when (selectedShift) {
+            1 -> currentRecord.shift1
+            2 -> currentRecord.shift2
+            else -> currentRecord.shift3
+        }
+        val dispenser = if (selectedMpd == "MPD 1") shiftObj.mpd1 else shiftObj.mpd2
+        val nozzle = when (selectedNozzle) {
+            "Petrol N2" -> dispenser.petrolN2
+            "Petrol N3" -> dispenser.petrolN3
+            "Diesel N1" -> dispenser.dieselN1
+            else -> dispenser.dieselN4
+        }
+        nozzle.open
+    }
+
+    var newOpenValueInput by remember(currentReading) { mutableStateOf(currentReading.toString()) }
     var showConfirmDialog by remember { mutableStateOf(false) }
-    var countdown by remember { mutableStateOf(10) }
+    var countdown by remember { mutableIntStateOf(10) }
 
     LaunchedEffect(showConfirmDialog) {
         if (showConfirmDialog) {
@@ -296,12 +304,31 @@ private fun NozzleResetModal(
         }
     }
 
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text("Nozzle Meter Reset (${currentRecord.date})", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Select Shift to Reset Open Meter:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 12.dp)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Spacer(Modifier.height(topInset + 4.dp))
+
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            Text("Hardware Meter Maintenance", fontWeight = FontWeight.Bold, fontSize = 18.sp)
+        }
+
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(
+                modifier = Modifier.padding(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Select Shift:", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     listOf(1, 2, 3).forEach { shiftNum ->
                         FilterChip(
@@ -334,35 +361,49 @@ private fun NozzleResetModal(
                     }
                 }
 
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Current Recorded Open Reading:", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("$currentReading L", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold, color = MaterialTheme.colorScheme.primary)
+                }
+
                 OutlinedTextField(
                     value = newOpenValueInput,
                     onValueChange = { input -> if (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$"))) newOpenValueInput = input },
-                    label = { Text("New Open Reading Value (L)", fontSize = 10.sp) },
+                    label = { Text("New Hardware Open Reading (L)", fontSize = 10.sp) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Button(
+                    onClick = { showConfirmDialog = true },
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(44.dp)
+                ) {
+                    Text("Apply Hardware Nozzle Reset", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
             }
-        },
-        confirmButton = {
-            Button(
-                onClick = { showConfirmDialog = true },
-                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
-            ) {
-                Text("Proceed to Reset", fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } }
-    )
+        }
+
+        Spacer(Modifier.height(bottomInset + 8.dp))
+    }
 
     if (showConfirmDialog) {
         AlertDialog(
             onDismissRequest = { showConfirmDialog = false },
-            title = { Text("⚠️ WARNING: Confirm Meter Reset", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, fontSize = 15.sp) },
+            title = { Text("⚠️ Confirm Hardware Reset", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.error, fontSize = 15.sp) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("You are resetting $selectedMpd $selectedNozzle Open Reading for Shift $selectedShift on ${currentRecord.date} to $newOpenValueInput L.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    Text("• Previous shift/day close readings will NOT be altered.\n• A RED 'RESET' badge will mark this nozzle for Shift $selectedShift.\n• Stock calculations will adjust based on sales beyond $newOpenValueInput L.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Resetting $selectedMpd $selectedNozzle (Shift $selectedShift) on ${currentRecord.date} to $newOpenValueInput L.", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("• Previous shift/day readings will NOT be altered.\n• A RED 'RESET' badge will mark this nozzle for Shift $selectedShift.", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             confirmButton = {
@@ -371,14 +412,18 @@ private fun NozzleResetModal(
                     onClick = {
                         showConfirmDialog = false
                         val parsedVal = newOpenValueInput.toDoubleOrNull() ?: 0.0
-                        onConfirmReset(selectedShift, selectedMpd, selectedNozzle, parsedVal)
+                        val updatedRecord = applyNozzleReset(currentRecord, selectedShift, selectedMpd, selectedNozzle, parsedVal)
+                        onRecordChanged(updatedRecord)
+                        onBack()
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                 ) {
                     Text(if (countdown > 0) "Confirm ($countdown s)" else "CONFIRM RESET", fontWeight = FontWeight.Bold)
                 }
             },
-            dismissButton = { TextButton(onClick = { showConfirmDialog = false }) { Text("Cancel") } }
+            dismissButton = {
+                TextButton(onClick = { showConfirmDialog = false }) { Text("Cancel") }
+            }
         )
     }
 }
@@ -546,7 +591,6 @@ private fun StaffKeyRowItem(
 ) {
     var showDeleteConfirm by remember { mutableStateOf(false) }
 
-    // Keep local switch states synchronized with keyItem updates
     var localReadOnly by remember(keyItem.isReadOnly) { mutableStateOf(keyItem.isReadOnly) }
     var localCanEditPast by remember(keyItem.canEditPastDates) { mutableStateOf(keyItem.canEditPastDates) }
     var localStatus by remember(keyItem.status) { mutableStateOf(keyItem.status) }
@@ -589,7 +633,6 @@ private fun StaffKeyRowItem(
 
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // Active / Revoked Status Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -613,7 +656,6 @@ private fun StaffKeyRowItem(
                 )
             }
 
-            // READ-ONLY MODE SWITCH (Instantly persists & updates local state)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -630,7 +672,6 @@ private fun StaffKeyRowItem(
                 )
             }
 
-            // Past Date Edit Toggle
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -647,7 +688,6 @@ private fun StaffKeyRowItem(
                 )
             }
 
-            // Role Switcher
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,

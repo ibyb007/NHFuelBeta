@@ -312,8 +312,8 @@ fun SettingsScreen(
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "App developed by:",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 16.dp)
                 )
@@ -599,7 +599,7 @@ private fun DeveloperCreditLine() {
                 fontSize = 42.sp,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .offset(x = truckLeftX.dp)
+                    .offset(x = truckLeftX.dp, y = (-14).dp)
                     .alpha(truckExitAlpha.value)
             )
         }
@@ -607,7 +607,7 @@ private fun DeveloperCreditLine() {
             text = "Bony Biswas",
             modifier = Modifier
                 .align(Alignment.BottomStart)
-                .offset(x = textLeftX.dp, y = (-4).dp)
+                .offset(x = textLeftX.dp, y = (-14).dp)
         )
     }
 }

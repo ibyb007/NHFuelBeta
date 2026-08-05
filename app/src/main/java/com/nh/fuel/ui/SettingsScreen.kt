@@ -191,7 +191,7 @@ fun SettingsScreen(
                             Text(session.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Text("Role: ${session.role.name}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                             Text(
-                                "Permissions: ${if (session.isReadOnly) "Read-Only Mode" else "Full Access"} | Past Edit: ${if (session.canEditPastDates) "Allowed" else "Locked"}",
+                                "Permissions: ${if (session.isReadOnly) "Read-Only Mode" else "Full Access"} | Global Edit: ${if (session.canEditPastDates) "Allowed" else "Locked"} | Finance Edit: ${if (session.canEditFinancePastDates) "Allowed" else "Locked"}",
                                 fontSize = 9.sp,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -1052,84 +1052,6 @@ private fun HardwareMaintenanceScreen(
     }
 }
 
-fun applyNozzleReset(
-    record: DailyFuelRecord,
-    shiftNumber: Int,
-    mpdName: String,
-    nozzleKey: String,
-    newOpenValue: Double
-): DailyFuelRecord {
-    fun updateNozzle(nozzle: NozzleShift): NozzleShift {
-        return nozzle.copy(
-            open = newOpenValue,
-            isReset = true,
-            originalOpenBeforeReset = if (nozzle.originalOpenBeforeReset > 0.0) nozzle.originalOpenBeforeReset else nozzle.open
-        )
-    }
-
-    fun updateDispenser(dispenser: DispenserShift): DispenserShift {
-        return when (nozzleKey) {
-            "Petrol N2" -> dispenser.copy(petrolN2 = updateNozzle(dispenser.petrolN2))
-            "Petrol N3" -> dispenser.copy(petrolN3 = updateNozzle(dispenser.petrolN3))
-            "Diesel N1" -> dispenser.copy(dieselN1 = updateNozzle(dispenser.dieselN1))
-            "Diesel N4" -> dispenser.copy(dieselN4 = updateNozzle(dispenser.dieselN4))
-            else -> dispenser
-        }
-    }
-
-    fun updateShift(shift: DayShift): DayShift {
-        return if (mpdName == "MPD 1") {
-            shift.copy(mpd1 = updateDispenser(shift.mpd1))
-        } else {
-            shift.copy(mpd2 = updateDispenser(shift.mpd2))
-        }
-    }
-
-    return when (shiftNumber) {
-        1 -> record.copy(shift1 = updateShift(record.shift1), lastUpdatedTimestamp = System.currentTimeMillis())
-        2 -> record.copy(shift2 = updateShift(record.shift2), lastUpdatedTimestamp = System.currentTimeMillis())
-        else -> record.copy(shift3 = updateShift(record.shift3), lastUpdatedTimestamp = System.currentTimeMillis())
-    }
-}
-
-fun applyNozzleUndoReset(
-    record: DailyFuelRecord,
-    shiftNumber: Int,
-    mpdName: String,
-    nozzleKey: String
-): DailyFuelRecord {
-    fun revertNozzle(nozzle: NozzleShift): NozzleShift {
-        return nozzle.copy(
-            open = if (nozzle.originalOpenBeforeReset > 0.0) nozzle.originalOpenBeforeReset else nozzle.open,
-            isReset = false
-        )
-    }
-
-    fun updateDispenser(dispenser: DispenserShift): DispenserShift {
-        return when (nozzleKey) {
-            "Petrol N2" -> dispenser.copy(petrolN2 = revertNozzle(dispenser.petrolN2))
-            "Petrol N3" -> dispenser.copy(petrolN3 = revertNozzle(dispenser.petrolN3))
-            "Diesel N1" -> dispenser.copy(dieselN1 = revertNozzle(dispenser.dieselN1))
-            "Diesel N4" -> dispenser.copy(dieselN4 = revertNozzle(dispenser.dieselN4))
-            else -> dispenser
-        }
-    }
-
-    fun updateShift(shift: DayShift): DayShift {
-        return if (mpdName == "MPD 1") {
-            shift.copy(mpd1 = updateDispenser(shift.mpd1))
-        } else {
-            shift.copy(mpd2 = updateDispenser(shift.mpd2))
-        }
-    }
-
-    return when (shiftNumber) {
-        1 -> record.copy(shift1 = updateShift(record.shift1), lastUpdatedTimestamp = System.currentTimeMillis())
-        2 -> record.copy(shift2 = updateShift(record.shift2), lastUpdatedTimestamp = System.currentTimeMillis())
-        else -> record.copy(shift3 = updateShift(record.shift3), lastUpdatedTimestamp = System.currentTimeMillis())
-    }
-}
-
 @Composable
 private fun StaffManagementScreen(
     onBack: () -> Unit,
@@ -1216,6 +1138,7 @@ private fun StaffKeyRowItem(
 
     var localReadOnly by remember(keyItem.isReadOnly) { mutableStateOf(keyItem.isReadOnly) }
     var localCanEditPast by remember(keyItem.canEditPastDates) { mutableStateOf(keyItem.canEditPastDates) }
+    var localCanEditFinancePast by remember(keyItem.canEditFinancePastDates) { mutableStateOf(keyItem.canEditFinancePastDates) }
     var localStatus by remember(keyItem.status) { mutableStateOf(keyItem.status) }
 
     Card(
@@ -1258,10 +1181,18 @@ private fun StaffKeyRowItem(
             }
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                Text("Past Date Edit Privilege", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Allow Editing Past Dates (Global)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Switch(checked = localCanEditPast, onCheckedChange = { canEdit ->
                     localCanEditPast = canEdit
                     onUpdateKey(keyItem.copy(canEditPastDates = canEdit))
+                }, modifier = Modifier.height(20.dp))
+            }
+
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("Allow Editing Past Dates (Finance Only)", fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Switch(checked = localCanEditFinancePast, onCheckedChange = { canEditFinance ->
+                    localCanEditFinancePast = canEditFinance
+                    onUpdateKey(keyItem.copy(canEditFinancePastDates = canEditFinance))
                 }, modifier = Modifier.height(20.dp))
             }
 
@@ -1299,6 +1230,7 @@ private fun GenerateStaffKeyModal(
     var nickname by remember { mutableStateOf("") }
     var selectedRole by remember { mutableStateOf(Role.MANAGER) }
     var canEditPastDates by remember { mutableStateOf(false) }
+    var canEditFinancePastDates by remember { mutableStateOf(false) }
     var isReadOnly by remember { mutableStateOf(false) }
 
     Dialog(onDismissRequest = onDismiss) {
@@ -1318,8 +1250,13 @@ private fun GenerateStaffKeyModal(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-                    Text("Allow Editing Past Dates", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Text("Allow Editing Past Dates (Global)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     Switch(checked = canEditPastDates, onCheckedChange = { canEditPastDates = it })
+                }
+
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+                    Text("Allow Editing Past Dates (Finance)", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                    Switch(checked = canEditFinancePastDates, onCheckedChange = { canEditFinancePastDates = it })
                 }
 
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
@@ -1329,7 +1266,19 @@ private fun GenerateStaffKeyModal(
                         if (nickname.isNotBlank()) {
                             val generatedCode = generateRandom8CharKey()
                             val nowStr = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                            onSave(StaffAccessKey(id = System.currentTimeMillis().toString(), accessCode = generatedCode, nickname = nickname.trim(), role = selectedRole, status = KeyStatus.ACTIVE, canEditPastDates = canEditPastDates, isReadOnly = isReadOnly, createdAt = nowStr))
+                            onSave(
+                                StaffAccessKey(
+                                    id = System.currentTimeMillis().toString(),
+                                    accessCode = generatedCode,
+                                    nickname = nickname.trim(),
+                                    role = selectedRole,
+                                    status = KeyStatus.ACTIVE,
+                                    canEditPastDates = canEditPastDates,
+                                    canEditFinancePastDates = canEditFinancePastDates,
+                                    isReadOnly = isReadOnly,
+                                    createdAt = nowStr
+                                )
+                            )
                         }
                     }) { Text("Generate", fontWeight = FontWeight.Bold) }
                 }

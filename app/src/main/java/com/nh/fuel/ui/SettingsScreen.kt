@@ -135,7 +135,7 @@ fun SettingsScreen(
             topInset = topInset,
             bottomInset = bottomInset
         )
-    } else if (showActivityLogPage) {
+    } else if (showActivityLogPage && canAccessAdminPanel) {
         BackHandler { showActivityLogPage = false }
         ActivityLogScreen(
             session = session,
@@ -261,27 +261,29 @@ fun SettingsScreen(
                     }
                 }
 
-                // Activity & Audit Logs Tile
-                Card(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
-                        .clickable { showActivityLogPage = true },
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                // Activity & Audit Logs Tile (RESTRICTED TO ADMIN & SUPER ADMIN)
+                if (canAccessAdminPanel) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                            .clickable { showActivityLogPage = true },
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
                     ) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                            Column {
-                                Text("Activity & Audit Logs", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                Text("View history of changes for the last 90 days", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Icon(Icons.Default.History, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Column {
+                                    Text("Activity & Audit Logs", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("View history of changes for the last 90 days", fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                }
                             }
+                            Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
-                        Icon(Icons.Default.ChevronRight, contentDescription = "Open", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
 

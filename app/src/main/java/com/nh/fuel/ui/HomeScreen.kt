@@ -822,7 +822,7 @@ fun HomeScreenContent(
             if (activeShift.totalPetrolTesting > 0.0 || activeShift.totalDieselTesting > 0.0) {
                 HorizontalDivider(modifier = Modifier.padding(horizontal = 8.dp))
                 Text(
-                    text = "Shift $selectedShiftTab Testing Recorded: Petrol ${activeShift.totalPetrolTesting} L | Diesel ${activeShift.totalDieselTesting} L (Returned to Tank)",
+                    text = "Shift $selectedShiftTab Testing Recorded: Petrol ${formatDecimal(activeShift.totalPetrolTesting)} L | Diesel ${formatDecimal(activeShift.totalDieselTesting)} L (Returned to Tank)",
                     fontSize = 10.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.primary,
@@ -957,23 +957,23 @@ fun HomeScreenContent(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Shift 1", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                        Text("  Petrol: ${record.shift1.petrolSale} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
-                        Text("  Diesel: ${record.shift1.dieselSale} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
+                        Text("  Petrol: ${formatDecimal(record.shift1.petrolSale)} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
+                        Text("  Diesel: ${formatDecimal(record.shift1.dieselSale)} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
                     }
 
                     if (record.shift1.isComplete || record.shift2.petrolSale > 0.0 || record.shift2.dieselSale > 0.0) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Shift 2", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text("  Petrol: ${record.shift2.petrolSale} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
-                            Text("  Diesel: ${record.shift2.dieselSale} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
+                            Text("  Petrol: ${formatDecimal(record.shift2.petrolSale)} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
+                            Text("  Diesel: ${formatDecimal(record.shift2.dieselSale)} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
                         }
                     }
 
                     if (record.shift2.isComplete || record.shift3.petrolSale > 0.0 || record.shift3.dieselSale > 0.0) {
                         Column(modifier = Modifier.weight(1f)) {
                             Text("Shift 3", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-                            Text("  Petrol: ${record.shift3.petrolSale} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
-                            Text("  Diesel: ${record.shift3.dieselSale} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
+                            Text("  Petrol: ${formatDecimal(record.shift3.petrolSale)} L", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 10.sp)
+                            Text("  Diesel: ${formatDecimal(record.shift3.dieselSale)} L", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 10.sp)
                         }
                     }
                 }
@@ -981,8 +981,8 @@ fun HomeScreenContent(
                 HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
                 Text("Total 24H Full Day Net Sales (Shift 1 + 2 + 3):", fontWeight = FontWeight.Bold, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurface)
-                Text("  Total Petrol Net Sold: ${record.totalPetrolSell} Litre (Testing: ${record.totalPetrolTesting} L)", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 12.sp)
-                Text("  Total Diesel Net Sold: ${record.totalDieselSell} Litre (Testing: ${record.totalDieselTesting} L)", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 12.sp)
+                Text("  Total Petrol Net Sold: ${formatDecimal(record.totalPetrolSell)} Litre (Testing: ${formatDecimal(record.totalPetrolTesting)} L)", fontWeight = FontWeight.Bold, color = petrolColor, fontSize = 12.sp)
+                Text("  Total Diesel Net Sold: ${formatDecimal(record.totalDieselSell)} Litre (Testing: ${formatDecimal(record.totalDieselTesting)} L)", fontWeight = FontWeight.Bold, color = dieselColor, fontSize = 12.sp)
             }
         }
 
@@ -1018,7 +1018,7 @@ fun HomeScreenContent(
             title = { Text("Save Pump Testing Readings?", fontWeight = FontWeight.Bold, fontSize = 15.sp) },
             text = {
                 Text(
-                    text = "This will deduct testing fuel (Petrol: ${activeShift.totalPetrolTesting} L, Diesel: ${activeShift.totalDieselTesting} L) from Net Sales and Revenue. Fuel will not be deducted from tank stock.",
+                    text = "This will deduct testing fuel (Petrol: ${formatDecimal(activeShift.totalPetrolTesting)} L, Diesel: ${formatDecimal(activeShift.totalDieselTesting)} L) from Net Sales and Revenue. Fuel will not be deducted from tank stock.",
                     fontSize = 12.sp
                 )
             },
@@ -1223,7 +1223,7 @@ fun FuelTankCard(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = "$exactStock L",
+                            text = "${formatDecimal(exactStock)} L",
                             fontWeight = FontWeight.ExtraBold,
                             color = stockColor,
                             fontSize = 18.sp
@@ -1288,7 +1288,7 @@ fun FuelTankCard(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(
-                        text = if (lastDipTime.isNotBlank()) "Last Reading: $lastDipAmount L @ $lastDipTime" else "Last Reading: None",
+                        text = if (lastDipTime.isNotBlank()) "Last Reading: ${formatDecimal(lastDipAmount)} L @ $lastDipTime" else "Last Reading: None",
                         fontSize = 8.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.weight(1f)
@@ -1334,7 +1334,7 @@ fun FuelTankCard(
                 ) { Text("+", fontSize = 12.sp) }
             }
 
-            Text("Total Refilled: $cumulativeRefill L", fontSize = 10.sp, color = stockColor)
+            Text("Total Refilled: ${formatDecimal(cumulativeRefill)} L", fontSize = 10.sp, color = stockColor)
 
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -1344,7 +1344,7 @@ fun FuelTankCard(
                 Column(modifier = Modifier.weight(1f)) {
                     Text("Last Refill:", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
                     Text(
-                        text = if (lastRefill.timestamp.isNotBlank()) "${lastRefill.amount} L @ ${lastRefill.timestamp}" else "None",
+                        text = if (lastRefill.timestamp.isNotBlank()) "${formatDecimal(lastRefill.amount)} L @ ${lastRefill.timestamp}" else "None",
                         fontSize = 8.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -1367,7 +1367,7 @@ fun FuelTankCard(
             HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
             Text(
-                text = "Total Variation: ${if (cumulativeVariation > 0.0) "+" else ""}$cumulativeVariation L",
+                text = "Total Variation: ${if (cumulativeVariation > 0.0) "+" else ""}${formatDecimal(cumulativeVariation)} L",
                 fontSize = 10.sp,
                 color = if (cumulativeVariation < 0.0) Color(0xFFFF5252) else stockColor
             )
@@ -1375,7 +1375,7 @@ fun FuelTankCard(
             Column {
                 Text("Last Variation:", fontWeight = FontWeight.Bold, fontSize = 9.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    text = if (lastVariationTime.isNotBlank()) "${if (lastVariationAmount > 0.0) "+" else ""}$lastVariationAmount L @ $lastVariationTime" else "None",
+                    text = if (lastVariationTime.isNotBlank()) "${if (lastVariationAmount > 0.0) "+" else ""}${formatDecimal(lastVariationAmount)} L @ $lastVariationTime" else "None",
                     fontSize = 8.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -1386,7 +1386,7 @@ fun FuelTankCard(
             Column {
                 Text("Current Stock:", fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
                 Text(
-                    text = "$currentStorage L",
+                    text = "${formatDecimal(currentStorage)} L",
                     fontWeight = FontWeight.ExtraBold,
                     color = stockColor,
                     fontSize = 22.sp
@@ -1404,19 +1404,19 @@ fun FuelTankCard(
             title = { Text("Confirm Tank Dip Reading", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Entered Dip Reading: $targetVal Litres", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-                    Text("Expected Current Stock: $currentStorage Litres", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("Entered Dip Reading: ${formatDecimal(targetVal)} Litres", fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                    Text("Expected Current Stock: ${formatDecimal(currentStorage)} Litres", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
                     if (diff > 0.0) {
                         Text(
-                            text = "Variation Detected: +$diff Litres (surplus)",
+                            text = "Variation Detected: +${formatDecimal(diff)} Litres (surplus)",
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFF2E7D32),
                             fontSize = 12.sp
                         )
                     } else if (diff < 0.0) {
                         Text(
-                            text = "Variation Detected: ${diff} Litres (shortage)",
+                            text = "Variation Detected: ${formatDecimal(diff)} Litres (shortage)",
                             fontWeight = FontWeight.Bold,
                             color = Color(0xFFC62828),
                             fontSize = 12.sp
@@ -1452,7 +1452,7 @@ fun FuelTankCard(
             title = { Text("Undo Last Dip Reading?", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "Are you sure you want to revert the reading ($lastDipAmount L @ $lastDipTime)? This will remove its associated variation ($lastVariationAmount L) and restore previous stock states.",
+                    text = "Are you sure you want to revert the reading (${formatDecimal(lastDipAmount)} L @ $lastDipTime)? This will remove its associated variation (${formatDecimal(lastVariationAmount)} L) and restore previous stock states.",
                     fontSize = 12.sp
                 )
             },
@@ -1476,7 +1476,7 @@ fun FuelTankCard(
             title = { Text("Undo Last Refill?", fontSize = 15.sp, fontWeight = FontWeight.Bold) },
             text = {
                 Text(
-                    text = "Are you sure you want to revert the last refill delivery of ${lastRefill.amount} L added on ${lastRefill.timestamp}? This will deduct ${lastRefill.amount} L from current stock and refilled total.",
+                    text = "Are you sure you want to revert the last refill delivery of ${formatDecimal(lastRefill.amount)} L added on ${lastRefill.timestamp}? This will deduct ${formatDecimal(lastRefill.amount)} L from current stock and refilled total.",
                     fontSize = 12.sp
                 )
             },
@@ -1685,7 +1685,7 @@ fun NozzleRow(
 
         if (nozzle.testing > 0.0 && !showTestingField) {
             Text(
-                text = "P.T - ${nozzle.testing}L",
+                text = "P.T - ${formatDecimal(nozzle.testing)}L",
                 fontSize = 9.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = MaterialTheme.colorScheme.primary,
@@ -1754,4 +1754,13 @@ fun NumberField(
         ),
         modifier = modifier
     )
+}
+
+// HELPER FUNCTION FOR DISPLAYING CLEAN UP TO 2 DECIMAL PLACES
+private fun formatDecimal(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toLong().toString()
+    } else {
+        String.format(Locale.US, "%.2f", value)
+    }
 }

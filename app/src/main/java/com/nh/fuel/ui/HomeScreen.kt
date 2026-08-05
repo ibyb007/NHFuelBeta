@@ -34,8 +34,8 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.FontFamily
-import androidx.compose.ui.text.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -455,8 +455,6 @@ fun HomeScreenContent(
     }
 
     var selectedShiftTab by remember(record.date) { mutableIntStateOf(activeUncompletedShift) }
-
-    // NOTE: REMOVED AUTO-TAB SWITCHING LaunchedEffect TO PREVENT DECIMAL ENTRY JUMP BUG
 
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showSaveFullDayDialog by remember { mutableStateOf(false) }
@@ -1509,7 +1507,7 @@ fun ShiftInputBlock(
     onShiftUpdated: (DayShift) -> Unit
 ) {
     var showSkipWarningDialog by remember { mutableStateOf(false) }
-    var countdown by remember { mutableStateOf(5) }
+    var countdown by remember { mutableIntStateOf(5) }
 
     val hasCloseValueEntered = shift.mpd1.petrolN2.close > 0.0 || shift.mpd1.petrolN3.close > 0.0 ||
             shift.mpd1.dieselN1.close > 0.0 || shift.mpd1.dieselN4.close > 0.0 ||
@@ -1667,7 +1665,7 @@ fun NozzleRow(
             Text(nozzleLabel, fontWeight = FontWeight.Bold, fontSize = 10.sp)
 
             Column(modifier = Modifier.weight(1f)) {
-                NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset) { onChange(nozzle.copy(open = it)) }
+                NumberField(label = "Open", value = nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset) { onChange(nozzle.copy(open = it)) }
                 
                 if (nozzle.isReset) {
                     Text(
@@ -1681,7 +1679,7 @@ fun NozzleRow(
             }
 
             Column(modifier = Modifier.weight(1f)) {
-                NumberField("Close", nozzle.close, openValue = nozzle.open, enabled = canEdit) { onChange(nozzle.copy(close = it)) }
+                NumberField(label = "Close", value = nozzle.close, openValue = nozzle.open, enabled = canEdit) { onChange(nozzle.copy(close = it)) }
             }
         }
 
@@ -1702,7 +1700,7 @@ fun NozzleRow(
                 modifier = Modifier.padding(top = 2.dp)
             ) {
                 Text("Test L", fontSize = 8.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
-                NumberField("Testing L", nozzle.testing, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(testing = it)) }
+                NumberField(label = "Testing L", value = nozzle.testing, enabled = canEdit, modifier = Modifier.weight(1f)) { onChange(nozzle.copy(testing = it)) }
             }
         }
     }

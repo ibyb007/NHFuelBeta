@@ -849,6 +849,7 @@ private fun CreditLedgerContent(
         if (canEdit) {
             SettleCreditDialog(
                 credit = credit,
+                currentRecordDate = currentRecordDate,
                 onDismiss = { creditToSettle = null },
                 onConfirmSettlement = { updatedCredit ->
                     onAddOrUpdateCredit(updatedCredit)
@@ -1026,7 +1027,6 @@ private fun CustomerLedgerDetailScreen(
 
     val canEdit = !session.isReadOnly
 
-    // PARSE NOTES & GUARANTEE THE INITIAL CREDIT ENTRY (init_0) IS ALWAYS KEPT AT INDEX 0
     val parsedLogs = remember(customer.notes, customer.date, customer.totalAmountDue, customer.amountPaid) {
         val list = mutableListOf<InternalLogEntry>()
         
@@ -1047,8 +1047,8 @@ private fun CustomerLedgerDetailScreen(
                     val dateRegex = Regex("([0-9]{4}-[0-9]{2}-[0-9]{2})")
                     val dateMatch = dateRegex.find(trimmed)?.value ?: customer.date
 
-                    val timeRegex = Regex("([0-9]{4}-[0-9]{2}-[0-9]{2}\\s+[0-9]{2}:[0-9]{2}\\s*[a|p]m)", RegexOption.IGNORE_CASE)
-                    val fullTsMatch = timeRegex.find(trimmed)?.value
+                    val fullTsRegex = Regex("([0-9]{4}-[0-9]{2}-[0-9]{2}\\s+[0-9]{2}:[0-9]{2}\\s*[a|p]m)", RegexOption.IGNORE_CASE)
+                    val fullTsMatch = fullTsRegex.find(trimmed)?.value
 
                     val simpleTimeRegex = Regex("([0-9]{2}:[0-9]{2}\\s*[a|p]m)", RegexOption.IGNORE_CASE)
                     val timeOnlyMatch = simpleTimeRegex.find(trimmed)?.value ?: ""
@@ -1070,11 +1070,9 @@ private fun CustomerLedgerDetailScreen(
             }
         }
 
-        // Calculate initial credit principal
         val additionalDues = list.filter { !it.isPayment && it.typeLabel.contains("New Due", ignoreCase = true) }.sumOf { it.amount }
         val initialAmount = (customer.totalAmountDue - additionalDues).coerceAtLeast(0.0)
 
-        // Prepend Initial Credit Issued entry so it is NEVER lost when 2nd+ entries are added
         val initialEntry = InternalLogEntry(
             id = "init_0",
             typeLabel = "Initial Credit Issued",
@@ -1411,7 +1409,6 @@ private fun CustomerLedgerDetailScreen(
             entry = entry,
             onDismiss = { editingLogEntry = null },
             onSave = { updatedAmt, updatedDate, updatedNote ->
-                // PRESERVE ORIGINAL CREATION TIMESTAMP WHILE EDITING TRANSACTION DATE
                 val originalTimestamp = entry.timestamp
                 if (entry.id == "init_0") {
                     val additionalDues = parsedLogs.filter { !it.isPayment && it.id != "init_0" }.sumOf { it.amount }
@@ -1801,7 +1798,6 @@ private fun AddEditCreditDialog(
                         onClick = {
                             val enteredDue = addedAmountText.toDoubleOrNull() ?: 0.0
                             if (enteredDue > 0.0 && canEdit) {
-                                // REAL WALL-CLOCK TIMESTAMP (Date + Time when entry was actually made)
                                 val realWallClockTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                                 val record = if (isAddingNewDue && initialCredit != null) {
                                     val newNoteLog = buildString {
@@ -1944,7 +1940,6 @@ private fun SettleCreditDialog(
                     Button(onClick = {
                         val addedPayment = paymentAmountText.toDoubleOrNull() ?: 0.0
                         if (addedPayment > 0.0) {
-                            // REAL WALL-CLOCK TIMESTAMP (Date + Time when settlement was actually recorded)
                             val realWallClockTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                             val newNoteLog = buildString {
                                 if (credit.notes.isNotBlank()) append("${credit.notes}\n")

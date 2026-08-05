@@ -416,13 +416,13 @@ fun SalesScreen(
                     color = MaterialTheme.colorScheme.primary
                 )
                 Text(
-                    text = "  Petrol Sold: $totalPetrolLitre L   ${formatCurrency(totalPetrolRevenue)}",
+                    text = "  Petrol Sold: ${formatDecimal(totalPetrolLitre)} L   ${formatCurrency(totalPetrolRevenue)}",
                     fontWeight = FontWeight.Bold,
                     color = petrolColor,
                     fontSize = 12.sp
                 )
                 Text(
-                    text = "  Diesel Sold: $totalDieselLitre L   ${formatCurrency(totalDieselRevenue)}",
+                    text = "  Diesel Sold: ${formatDecimal(totalDieselLitre)} L   ${formatCurrency(totalDieselRevenue)}",
                     fontWeight = FontWeight.Bold,
                     color = dieselColor,
                     fontSize = 12.sp
@@ -704,8 +704,8 @@ private fun MpdSalesColumn(
     ) {
         Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(mpdTitle, fontWeight = FontWeight.Bold, fontSize = 11.sp, color = MaterialTheme.colorScheme.onSurface)
-            Text("Petrol (${dispenser.petrolSale} L):   ${formatCurrency(petrolRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = petrolColor)
-            Text("Diesel (${dispenser.dieselSale} L):   ${formatCurrency(dieselRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = dieselColor)
+            Text("Petrol (${formatDecimal(dispenser.petrolSale)} L):   ${formatCurrency(petrolRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = petrolColor)
+            Text("Diesel (${formatDecimal(dispenser.dieselSale)} L):   ${formatCurrency(dieselRev)}", fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = dieselColor)
             Text("MPD Revenue:   ${formatCurrency(mpdRevenue)}", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 1.dp))
@@ -784,6 +784,14 @@ private fun MpdSalesColumn(
     }
 }
 
+private fun formatDecimal(value: Double): String {
+    return if (value % 1.0 == 0.0) {
+        value.toLong().toString()
+    } else {
+        String.format(Locale.US, "%.2f", value)
+    }
+}
+
 private fun formatCurrency(amount: Double): String {
     return String.format(Locale.getDefault(), "%.2f", amount)
 }
@@ -834,11 +842,11 @@ private fun exportSalesRecord(
                     val dayExpense = allExpenses.filter { it.date == record.date }.sumOf { it.amount }
                     val netVar = record.petrolVariation + record.dieselVariation
                     val rawMismatch = String.format(Locale.US, "%.2f", record.dailyMismatch)
-                    append("${record.date},${record.totalPetrolSell},${record.petrolRefill},${record.petrolPrice},${formatCurrency(record.totalPetrolRevenue)},${record.currentPetrolStorage},${record.totalDieselSell},${record.dieselRefill},${record.dieselPrice},${formatCurrency(record.totalDieselRevenue)},${record.currentDieselStorage},${formatCurrency(record.grandTotalRevenue)},${formatCurrency(record.dailyCashCollected)},${formatCurrency(record.dailyDigitalCollected)},${formatCurrency(record.dailyCreditCollected)},${formatCurrency(record.dailyTotalCollected)},$rawMismatch,${record.petrolVariation},${record.dieselVariation},$netVar,${formatCurrency(dayExpense)}\n")
+                    append("${record.date},${formatDecimal(record.totalPetrolSell)},${formatDecimal(record.petrolRefill)},${record.petrolPrice},${formatCurrency(record.totalPetrolRevenue)},${formatDecimal(record.currentPetrolStorage)},${formatDecimal(record.totalDieselSell)},${formatDecimal(record.dieselRefill)},${record.dieselPrice},${formatCurrency(record.totalDieselRevenue)},${formatDecimal(record.currentDieselStorage)},${formatCurrency(record.grandTotalRevenue)},${formatCurrency(record.dailyCashCollected)},${formatCurrency(record.dailyDigitalCollected)},${formatCurrency(record.dailyCreditCollected)},${formatCurrency(record.dailyTotalCollected)},$rawMismatch,${formatDecimal(record.petrolVariation)},${formatDecimal(record.dieselVariation)},${formatDecimal(netVar)},${formatCurrency(dayExpense)}\n")
                 }
                 if (isMultiDay) {
                     val rawSumMismatch = String.format(Locale.US, "%.2f", sumMismatch)
-                    append("GRAND TOTAL,$sumPetrolLitre,$sumPetrolRefill,-,${formatCurrency(sumPetrolRev)},-,$sumDieselLitre,$sumDieselRefill,-,${formatCurrency(sumDieselRev)},-,${formatCurrency(sumGrandRev)},${formatCurrency(sumCash)},${formatCurrency(sumDigital)},${formatCurrency(sumCredit)},${formatCurrency(sumTotalCollected)},$rawSumMismatch,$sumPetrolVar,$sumDieselVar,$sumNetVar,${formatCurrency(sumExpenses)}\n")
+                    append("GRAND TOTAL,${formatDecimal(sumPetrolLitre)},${formatDecimal(sumPetrolRefill)},-,${formatCurrency(sumPetrolRev)},-,${formatDecimal(sumDieselLitre)},${formatDecimal(sumDieselRefill)},-,${formatCurrency(sumDieselRev)},-,${formatCurrency(sumGrandRev)},${formatCurrency(sumCash)},${formatCurrency(sumDigital)},${formatCurrency(sumCredit)},${formatCurrency(sumTotalCollected)},$rawSumMismatch,${formatDecimal(sumPetrolVar)},${formatDecimal(sumDieselVar)},${formatDecimal(sumNetVar)},${formatCurrency(sumExpenses)}\n")
                 }
             }
             try {
@@ -903,25 +911,25 @@ private fun exportSalesRecord(
                     val rawMismatch = String.format(Locale.US, "%.2f", record.dailyMismatch)
                     append("<tr>")
                     append("<td>${record.date}</td>")
-                    append("<td class=\"number-cell\">${record.totalPetrolSell}</td>")
-                    append("<td class=\"number-cell\">${record.petrolRefill}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.totalPetrolSell)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.petrolRefill)}</td>")
                     append("<td class=\"number-cell\">${record.petrolPrice}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.totalPetrolRevenue)}</td>")
-                    append("<td class=\"number-cell\">${record.currentPetrolStorage}</td>")
-                    append("<td class=\"number-cell\">${record.totalDieselSell}</td>")
-                    append("<td class=\"number-cell\">${record.dieselRefill}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.currentPetrolStorage)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.totalDieselSell)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.dieselRefill)}</td>")
                     append("<td class=\"number-cell\">${record.dieselPrice}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.totalDieselRevenue)}</td>")
-                    append("<td class=\"number-cell\">${record.currentDieselStorage}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.currentDieselStorage)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.grandTotalRevenue)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.dailyCashCollected)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.dailyDigitalCollected)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.dailyCreditCollected)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(record.dailyTotalCollected)}</td>")
                     append("<td class=\"number-cell\">$rawMismatch</td>")
-                    append("<td class=\"number-cell\">${record.petrolVariation}</td>")
-                    append("<td class=\"number-cell\">${record.dieselVariation}</td>")
-                    append("<td class=\"number-cell\">$netVar</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.petrolVariation)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(record.dieselVariation)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(netVar)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(dayExpense)}</td>")
                     append("</tr>")
                 }
@@ -929,13 +937,13 @@ private fun exportSalesRecord(
                     val rawSumMismatch = String.format(Locale.US, "%.2f", sumMismatch)
                     append("<tr class=\"grand-total-row\">")
                     append("<td>GRAND TOTAL</td>")
-                    append("<td class=\"number-cell\">$sumPetrolLitre</td>")
-                    append("<td class=\"number-cell\">$sumPetrolRefill</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumPetrolLitre)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumPetrolRefill)}</td>")
                     append("<td class=\"number-cell\">-</td>")
                     append("<td class=\"number-cell\">${formatCurrency(sumPetrolRev)}</td>")
                     append("<td class=\"number-cell\">-</td>")
-                    append("<td class=\"number-cell\">$sumDieselLitre</td>")
-                    append("<td class=\"number-cell\">$sumDieselRefill</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumDieselLitre)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumDieselRefill)}</td>")
                     append("<td class=\"number-cell\">-</td>")
                     append("<td class=\"number-cell\">${formatCurrency(sumDieselRev)}</td>")
                     append("<td class=\"number-cell\">-</td>")
@@ -945,9 +953,9 @@ private fun exportSalesRecord(
                     append("<td class=\"number-cell\">${formatCurrency(sumCredit)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(sumTotalCollected)}</td>")
                     append("<td class=\"number-cell\">$rawSumMismatch</td>")
-                    append("<td class=\"number-cell\">$sumPetrolVar</td>")
-                    append("<td class=\"number-cell\">$sumDieselVar</td>")
-                    append("<td class=\"number-cell\">$sumNetVar</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumPetrolVar)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumDieselVar)}</td>")
+                    append("<td class=\"number-cell\">${formatDecimal(sumNetVar)}</td>")
                     append("<td class=\"number-cell\">${formatCurrency(sumExpenses)}</td>")
                     append("</tr>")
                 }

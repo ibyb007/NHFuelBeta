@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
+import com.nh.fuel.data.ActivityLogger
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
@@ -69,13 +70,12 @@ fun SalesScreen(
 
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-    // Strict Permission Guard:
-    // Admins and Owners can ALWAYS edit sales and collections.
-    // Managers are blocked if Read-Only is ON, OR if editing an unpermitted past date, OR if the day is finalized.
+    // UPDATED PERMISSION GUARD LOGIC FOR SALESSCREEN:
+    // If the day is unfinalized (!isDayFinalized), managers can input and edit sales/collections data freely.
     val canEdit = if (isAdminOrOwner) {
         true
     } else {
-        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+        !session.isReadOnly && (!isDayFinalized || (!isPastDate || session.canEditPastDates))
     }
 
     var selectedPeriod by remember { mutableStateOf(PeriodFilter.DAY) }
@@ -272,6 +272,7 @@ fun SalesScreen(
                                 petrolPriceText = input
                                 val valParsed = input.toDoubleOrNull() ?: 0.0
                                 onRecordChanged(currentRecord.copy(petrolPrice = valParsed))
+                                ActivityLogger.log(session, "updated petrol rate to ₹$valParsed for ${currentRecord.date}")
                             }
                         },
                         label = { Text("Petrol Price (₹)", fontSize = 9.sp) },
@@ -288,6 +289,7 @@ fun SalesScreen(
                                 dieselPriceText = input
                                 val valParsed = input.toDoubleOrNull() ?: 0.0
                                 onRecordChanged(currentRecord.copy(dieselPrice = valParsed))
+                                ActivityLogger.log(session, "updated diesel rate to ₹$valParsed for ${currentRecord.date}")
                             }
                         },
                         label = { Text("Diesel Price (₹)", fontSize = 9.sp) },
@@ -346,6 +348,8 @@ fun SalesScreen(
             )
 
             ShiftDetailedSalesBlock(
+                session = session,
+                currentRecordDate = currentRecord.date,
                 shiftTitle = "Shift 1",
                 shift = currentRecord.shift1,
                 petrolPrice = currentRecord.petrolPrice,
@@ -354,11 +358,16 @@ fun SalesScreen(
                 dieselColor = dieselColor,
                 canEdit = canEdit,
                 onShiftUpdated = { updatedShift ->
-                    if (canEdit) onRecordChanged(currentRecord.copy(shift1 = updatedShift))
+                    if (canEdit) {
+                        onRecordChanged(currentRecord.copy(shift1 = updatedShift))
+                        ActivityLogger.log(session, "updated Shift 1 collection entries for ${currentRecord.date}")
+                    }
                 }
             )
 
             ShiftDetailedSalesBlock(
+                session = session,
+                currentRecordDate = currentRecord.date,
                 shiftTitle = "Shift 2",
                 shift = currentRecord.shift2,
                 petrolPrice = currentRecord.petrolPrice,
@@ -367,11 +376,16 @@ fun SalesScreen(
                 dieselColor = dieselColor,
                 canEdit = canEdit,
                 onShiftUpdated = { updatedShift ->
-                    if (canEdit) onRecordChanged(currentRecord.copy(shift2 = updatedShift))
+                    if (canEdit) {
+                        onRecordChanged(currentRecord.copy(shift2 = updatedShift))
+                        ActivityLogger.log(session, "updated Shift 2 collection entries for ${currentRecord.date}")
+                    }
                 }
             )
 
             ShiftDetailedSalesBlock(
+                session = session,
+                currentRecordDate = currentRecord.date,
                 shiftTitle = "Shift 3",
                 shift = currentRecord.shift3,
                 petrolPrice = currentRecord.petrolPrice,
@@ -380,7 +394,10 @@ fun SalesScreen(
                 dieselColor = dieselColor,
                 canEdit = canEdit,
                 onShiftUpdated = { updatedShift ->
-                    if (canEdit) onRecordChanged(currentRecord.copy(shift3 = updatedShift))
+                    if (canEdit) {
+                        onRecordChanged(currentRecord.copy(shift3 = updatedShift))
+                        ActivityLogger.log(session, "updated Shift 3 collection entries for ${currentRecord.date}")
+                    }
                 }
             )
         }
@@ -550,6 +567,8 @@ fun SalesScreen(
 
 @Composable
 private fun ShiftDetailedSalesBlock(
+    session: AppUserSession,
+    currentRecordDate: String,
     shiftTitle: String,
     shift: DayShift,
     petrolPrice: Double,
@@ -585,6 +604,9 @@ private fun ShiftDetailedSalesBlock(
 
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 MpdSalesColumn(
+                    session = session,
+                    currentRecordDate = currentRecordDate,
+                    shiftTitle = shiftTitle,
                     mpdTitle = "MPD 1",
                     dispenser = shift.mpd1,
                     petrolPrice = petrolPrice,
@@ -599,6 +621,9 @@ private fun ShiftDetailedSalesBlock(
                 )
 
                 MpdSalesColumn(
+                    session = session,
+                    currentRecordDate = currentRecordDate,
+                    shiftTitle = shiftTitle,
                     mpdTitle = "MPD 2",
                     dispenser = shift.mpd2,
                     petrolPrice = petrolPrice,
@@ -645,6 +670,9 @@ private fun ShiftDetailedSalesBlock(
 
 @Composable
 private fun MpdSalesColumn(
+    session: AppUserSession,
+    currentRecordDate: String,
+    shiftTitle: String,
     mpdTitle: String,
     dispenser: DispenserShift,
     petrolPrice: Double,
@@ -689,6 +717,7 @@ private fun MpdSalesColumn(
                         cashText = input
                         val parsed = input.toDoubleOrNull() ?: 0.0
                         onDispenserUpdated(dispenser.copy(cashCollected = parsed))
+                        ActivityLogger.log(session, "updated $shiftTitle $mpdTitle cash collection to ₹$parsed for $currentRecordDate")
                     }
                 },
                 label = { Text("Cash  ", fontSize = 8.sp) },
@@ -705,6 +734,7 @@ private fun MpdSalesColumn(
                         digitalText = input
                         val parsed = input.toDoubleOrNull() ?: 0.0
                         onDispenserUpdated(dispenser.copy(digitalCollected = parsed))
+                        ActivityLogger.log(session, "updated $shiftTitle $mpdTitle digital collection to ₹$parsed for $currentRecordDate")
                     }
                 },
                 label = { Text("Digital  ", fontSize = 8.sp) },
@@ -721,6 +751,7 @@ private fun MpdSalesColumn(
                         creditText = input
                         val parsed = input.toDoubleOrNull() ?: 0.0
                         onDispenserUpdated(dispenser.copy(creditCollected = parsed))
+                        ActivityLogger.log(session, "updated $shiftTitle $mpdTitle credit collection to ₹$parsed for $currentRecordDate")
                     }
                 },
                 label = { Text("Credit (Lend)  ", fontSize = 8.sp) },

@@ -65,7 +65,7 @@ fun FinanceScreen(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    var selectedSubTab by remember { mutableStateOf(1) } // 0: Daily Expenses, 1: Credit / Lend Ledger
+    var selectedSubTab by remember { mutableIntStateOf(1) } // 0: Daily Expenses, 1: Credit / Lend Ledger
     var selectedCustomerForDetail by remember { mutableStateOf<CreditRecord?>(null) }
 
     if (selectedCustomerForDetail != null) {
@@ -182,8 +182,9 @@ fun ExpendScreenContent(
     val isPastDate = expenseDateInput < todayStr
     val isDayFinalized = allRecords.find { it.date == expenseDateInput }?.shift3?.isComplete == true
 
+    // DUAL PAST-DATE PERMISSION GUARD FOR EXPENSES
     val canEdit = !session.isReadOnly &&
-            (!isDayFinalized || (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER))
+            (!isDayFinalized || (!isPastDate || session.canEditPastDates || session.canEditFinancePastDates || session.isOwnerLogin || session.role != Role.MANAGER))
 
     val dayExpenses = remember(allExpenses, expenseDateInput) {
         allExpenses.filter { it.date == expenseDateInput }
@@ -1024,7 +1025,7 @@ private fun CustomerLedgerDetailScreen(
 
     val canEdit = !session.isReadOnly
 
-    // FIX 1 & 2: Parse notes into individual entries, while guaranteeing the 1st Initial Credit Entry is ALWAYS present
+    // PARSE NOTES & GUARANTEE THE INITIAL CREDIT ENTRY (init_0) IS ALWAYS KEPT AT INDEX 0
     val parsedLogs = remember(customer.notes, customer.date, customer.totalAmountDue, customer.amountPaid) {
         val list = mutableListOf<InternalLogEntry>()
         
@@ -1410,6 +1411,7 @@ private fun CustomerLedgerDetailScreen(
                     onUpdateCustomer(customer.copy(date = updatedDate, totalAmountDue = newTotalDue))
                 } else {
                     val updatedLogs = parsedLogs.filter { it.id != "init_0" }.map {
+                        // PRESERVE ACCURATE REAL-TIME WALL-CLOCK TIMESTAMP
                         if (it.id == entry.id) it.copy(amount = updatedAmt, date = updatedDate, paymentMode = updatedNote, timestamp = realEditTimestamp) else it
                     }
                     val recomputedNotes = updatedLogs.joinToString("\n") {
@@ -1614,8 +1616,9 @@ private fun AddEditCreditDialog(
     val isPastDate = entryDate < todayStr
     val isDayFinalized = allRecords.find { it.date == entryDate }?.shift3?.isComplete == true
 
+    // DUAL PAST-DATE PERMISSION GUARD FOR ADDING DUES
     val canEdit = !session.isReadOnly &&
-            (!isDayFinalized || (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER))
+            (!isDayFinalized || (!isPastDate || session.canEditPastDates || session.canEditFinancePastDates || session.isOwnerLogin || session.role != Role.MANAGER))
 
     val fuelRates = remember(entryDate, allRecords) {
         val exactRecord = allRecords.find { it.date == entryDate }

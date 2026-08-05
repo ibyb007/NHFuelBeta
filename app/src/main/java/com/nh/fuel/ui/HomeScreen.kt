@@ -1744,7 +1744,6 @@ fun NumberField(
             fontSize = 11.sp,
             textAlign = TextAlign.Start
         ),
-        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = MaterialTheme.colorScheme.onSurface,
             unfocusedTextColor = MaterialTheme.colorScheme.onSurface,

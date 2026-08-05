@@ -477,10 +477,12 @@ fun HomeScreenContent(
 
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
+    // UPDATED PERMISSION GUARD LOGIC:
+    // Unfinalized dates (!isDayFinalized) are considered active business dates and remain editable by managers.
     val canEditDate = if (isAdminOrOwner) {
         true
     } else {
-        !session.isReadOnly && (!isPastDate || session.canEditPastDates) && !isDayFinalized
+        !session.isReadOnly && (!isDayFinalized || (!isPastDate || session.canEditPastDates))
     }
 
     val isDark = isSystemInDarkTheme()

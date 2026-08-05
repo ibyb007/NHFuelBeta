@@ -182,8 +182,6 @@ fun ExpendScreenContent(
     val isPastDate = expenseDateInput < todayStr
     val isDayFinalized = allRecords.find { it.date == expenseDateInput }?.shift3?.isComplete == true
 
-    // DUAL PAST-DATE PERMISSION GUARD FOR EXPENSES
-    // Having either canEditPastDates OR canEditFinancePastDates unlocks past dates and finalized days for managers.
     val hasPastPrivilege = session.canEditPastDates || session.canEditFinancePastDates || session.isOwnerLogin || session.role != Role.MANAGER
     val canEdit = !session.isReadOnly &&
             (!isDayFinalized || hasPastPrivilege) &&
@@ -1028,6 +1026,7 @@ private fun CustomerLedgerDetailScreen(
 
     val canEdit = !session.isReadOnly
 
+    // PARSE NOTES & GUARANTEE THE INITIAL CREDIT ENTRY (init_0) IS ALWAYS KEPT AT INDEX 0
     val parsedLogs = remember(customer.notes, customer.date, customer.totalAmountDue, customer.amountPaid) {
         val list = mutableListOf<InternalLogEntry>()
         
@@ -1048,8 +1047,13 @@ private fun CustomerLedgerDetailScreen(
                     val dateRegex = Regex("([0-9]{4}-[0-9]{2}-[0-9]{2})")
                     val dateMatch = dateRegex.find(trimmed)?.value ?: customer.date
 
-                    val timeRegex = Regex("([0-9]{2}:[0-9]{2}\\s*[a|p]m)", RegexOption.IGNORE_CASE)
-                    val timeMatch = timeRegex.find(trimmed)?.value ?: ""
+                    val timeRegex = Regex("([0-9]{4}-[0-9]{2}-[0-9]{2}\\s+[0-9]{2}:[0-9]{2}\\s*[a|p]m)", RegexOption.IGNORE_CASE)
+                    val fullTsMatch = timeRegex.find(trimmed)?.value
+
+                    val simpleTimeRegex = Regex("([0-9]{2}:[0-9]{2}\\s*[a|p]m)", RegexOption.IGNORE_CASE)
+                    val timeOnlyMatch = simpleTimeRegex.find(trimmed)?.value ?: ""
+
+                    val resolvedTimestamp = fullTsMatch ?: if (timeOnlyMatch.isNotBlank()) "$dateMatch $timeOnlyMatch" else "$dateMatch 12:00 pm"
 
                     list.add(
                         InternalLogEntry(
@@ -1057,7 +1061,7 @@ private fun CustomerLedgerDetailScreen(
                             typeLabel = label,
                             isPayment = isPayment,
                             date = dateMatch,
-                            timestamp = if (timeMatch.isNotBlank()) "$dateMatch $timeMatch" else "$dateMatch 12:00 pm",
+                            timestamp = resolvedTimestamp,
                             amount = parsedAmt,
                             paymentMode = mode
                         )
@@ -1066,9 +1070,11 @@ private fun CustomerLedgerDetailScreen(
             }
         }
 
+        // Calculate initial credit principal
         val additionalDues = list.filter { !it.isPayment && it.typeLabel.contains("New Due", ignoreCase = true) }.sumOf { it.amount }
         val initialAmount = (customer.totalAmountDue - additionalDues).coerceAtLeast(0.0)
 
+        // Prepend Initial Credit Issued entry so it is NEVER lost when 2nd+ entries are added
         val initialEntry = InternalLogEntry(
             id = "init_0",
             typeLabel = "Initial Credit Issued",
@@ -1390,6 +1396,7 @@ private fun CustomerLedgerDetailScreen(
     if (showRecordPaymentDialog && canEdit) {
         SettleCreditDialog(
             credit = customer,
+            currentRecordDate = currentRecordDate,
             onDismiss = { showRecordPaymentDialog = false },
             onConfirmSettlement = { updated ->
                 onUpdateCustomer(updated)
@@ -1404,14 +1411,15 @@ private fun CustomerLedgerDetailScreen(
             entry = entry,
             onDismiss = { editingLogEntry = null },
             onSave = { updatedAmt, updatedDate, updatedNote ->
-                val realEditTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
+                // PRESERVE ORIGINAL CREATION TIMESTAMP WHILE EDITING TRANSACTION DATE
+                val originalTimestamp = entry.timestamp
                 if (entry.id == "init_0") {
                     val additionalDues = parsedLogs.filter { !it.isPayment && it.id != "init_0" }.sumOf { it.amount }
                     val newTotalDue = updatedAmt + additionalDues
                     onUpdateCustomer(customer.copy(date = updatedDate, totalAmountDue = newTotalDue))
                 } else {
                     val updatedLogs = parsedLogs.filter { it.id != "init_0" }.map {
-                        if (it.id == entry.id) it.copy(amount = updatedAmt, date = updatedDate, paymentMode = updatedNote, timestamp = realEditTimestamp) else it
+                        if (it.id == entry.id) it.copy(amount = updatedAmt, date = updatedDate, paymentMode = updatedNote, timestamp = originalTimestamp) else it
                     }
                     val recomputedNotes = updatedLogs.joinToString("\n") {
                         "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
@@ -1615,7 +1623,6 @@ private fun AddEditCreditDialog(
     val isPastDate = entryDate < todayStr
     val isDayFinalized = allRecords.find { it.date == entryDate }?.shift3?.isComplete == true
 
-    // DUAL PAST-DATE PERMISSION GUARD FOR ADDING DUES
     val hasPastPrivilege = session.canEditPastDates || session.canEditFinancePastDates || session.isOwnerLogin || session.role != Role.MANAGER
     val canEdit = !session.isReadOnly &&
             (!isDayFinalized || hasPastPrivilege) &&
@@ -1794,11 +1801,12 @@ private fun AddEditCreditDialog(
                         onClick = {
                             val enteredDue = addedAmountText.toDoubleOrNull() ?: 0.0
                             if (enteredDue > 0.0 && canEdit) {
-                                val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
+                                // REAL WALL-CLOCK TIMESTAMP (Date + Time when entry was actually made)
+                                val realWallClockTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                                 val record = if (isAddingNewDue && initialCredit != null) {
                                     val newNoteLog = buildString {
                                         if (initialCredit.notes.isNotBlank()) append("${initialCredit.notes}\n")
-                                        append("• New Due Added: ₹ $enteredDue on $entryDate @ $nowStr")
+                                        append("• New Due Added: ₹ $enteredDue on $entryDate @ $realWallClockTimestamp")
                                     }
                                     initialCredit.copy(
                                         date = entryDate,
@@ -1852,14 +1860,18 @@ private fun AddEditCreditDialog(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettleCreditDialog(
     credit: CreditRecord,
+    currentRecordDate: String,
     onDismiss: () -> Unit,
     onConfirmSettlement: (CreditRecord) -> Unit
 ) {
     var paymentAmountText by remember { mutableStateOf("") }
     var selectedPaymentMode by remember { mutableStateOf("Cash") }
+    var settlementDate by remember { mutableStateOf(currentRecordDate) }
+    var showSettlementDatePicker by remember { mutableStateOf(false) }
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -1884,6 +1896,17 @@ private fun SettleCreditDialog(
 
                 Text("Customer: ${credit.customerName}", fontWeight = FontWeight.Bold, fontSize = 12.sp)
                 Text("Remaining Balance: ₹ ${String.format(Locale.getDefault(), "%.2f", credit.remainingBalance)}", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Settlement Date: $settlementDate", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                    TextButton(onClick = { showSettlementDatePicker = true }) {
+                        Text("Change Date", fontSize = 11.sp)
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1921,14 +1944,15 @@ private fun SettleCreditDialog(
                     Button(onClick = {
                         val addedPayment = paymentAmountText.toDoubleOrNull() ?: 0.0
                         if (addedPayment > 0.0) {
-                            val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
+                            // REAL WALL-CLOCK TIMESTAMP (Date + Time when settlement was actually recorded)
+                            val realWallClockTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                             val newNoteLog = buildString {
                                 if (credit.notes.isNotBlank()) append("${credit.notes}\n")
-                                append("• Settlement Received: ₹ $addedPayment @ $nowStr ($selectedPaymentMode)")
+                                append("• Settlement Received: ₹ $addedPayment on $settlementDate @ $realWallClockTimestamp ($selectedPaymentMode)")
                             }
                             val updated = credit.copy(
                                 amountPaid = credit.amountPaid + addedPayment,
-                                lastPaymentDate = nowStr,
+                                lastPaymentDate = settlementDate,
                                 notes = newNoteLog
                             )
                             onConfirmSettlement(updated)
@@ -1936,6 +1960,27 @@ private fun SettleCreditDialog(
                     }) { Text("Confirm Payment", fontWeight = FontWeight.Bold) }
                 }
             }
+        }
+    }
+
+    if (showSettlementDatePicker) {
+        val datePickerState = rememberDatePickerState()
+        DatePickerDialog(
+            onDismissRequest = { showSettlementDatePicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    showSettlementDatePicker = false
+                    datePickerState.selectedDateMillis?.let { millis ->
+                        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
+                        settlementDate = sdf.format(Date(millis))
+                    }
+                }) { Text("Select Date", fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showSettlementDatePicker = false }) { Text("Cancel") }
+            }
+        ) {
+            DatePicker(state = datePickerState)
         }
     }
 }

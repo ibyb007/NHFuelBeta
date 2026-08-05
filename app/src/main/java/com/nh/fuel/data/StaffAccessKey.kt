@@ -14,6 +14,7 @@ enum class Role {
 }
 
 @Keep
+@com.google.firebase.firestore.IgnoreExtraProperties
 data class StaffAccessKey(
     val id: String = "",
     val accessCode: String = "",
@@ -22,7 +23,10 @@ data class StaffAccessKey(
     val status: KeyStatus = KeyStatus.ACTIVE,
     val canEditPastDates: Boolean = false,
     val canEditFinancePastDates: Boolean = false, // Dedicated Finance Past-Date Toggle
-    val isReadOnly: Boolean = false,
+    @get:com.google.firebase.firestore.PropertyName("isReadOnly")
+    @set:com.google.firebase.firestore.PropertyName("isReadOnly")
+    var isReadOnly: Boolean = false, // Read-only privilege toggle for managers
+    val createdBy: String = "",
     val createdAt: String = ""
 )
 

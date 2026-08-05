@@ -34,9 +34,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.FontFamily
+import androidx.compose.ui.text.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -445,7 +446,6 @@ fun HomeScreenContent(
     topInset: Dp = 0.dp,
     bottomInset: Dp = 0.dp
 ) {
-    // RESOLVE COLD START RESUMPTION: DYNAMICALLY CALCULATE INCOMPLETE SHIFT ON RECORD LOAD
     val activeUncompletedShift = remember(record) {
         when {
             !record.shift1.isComplete -> 1
@@ -456,14 +456,7 @@ fun HomeScreenContent(
 
     var selectedShiftTab by remember(record.date) { mutableIntStateOf(activeUncompletedShift) }
 
-    // KEEP TAB SYNCED IF CURRENT SHIFT GETS COMPLETED
-    LaunchedEffect(record) {
-        if (selectedShiftTab == 1 && record.shift1.isComplete) {
-            selectedShiftTab = 2
-        } else if (selectedShiftTab == 2 && record.shift2.isComplete) {
-            selectedShiftTab = 3
-        }
-    }
+    // NOTE: REMOVED AUTO-TAB SWITCHING LaunchedEffect TO PREVENT DECIMAL ENTRY JUMP BUG
 
     var showDatePickerModal by remember { mutableStateOf(false) }
     var showSaveFullDayDialog by remember { mutableStateOf(false) }
@@ -477,8 +470,6 @@ fun HomeScreenContent(
 
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-    // UPDATED PERMISSION GUARD LOGIC:
-    // Unfinalized dates (!isDayFinalized) are considered active business dates and remain editable by managers.
     val canEditDate = if (isAdminOrOwner) {
         true
     } else {
@@ -1678,7 +1669,6 @@ fun NozzleRow(
             Column(modifier = Modifier.weight(1f)) {
                 NumberField("Open", nozzle.open, openValue = nozzle.open, enabled = canEdit && !nozzle.isReset) { onChange(nozzle.copy(open = it)) }
                 
-                // RED "Re" INDICATOR DIRECTLY BELOW OPEN VALUE BOX
                 if (nozzle.isReset) {
                     Text(
                         text = "Re",
@@ -1741,11 +1731,22 @@ fun NumberField(
                 onValueChange(parsed)
             }
         },
-        label = { Text(label, fontSize = 8.sp) },
+        label = {
+            Text(
+                text = label,
+                fontSize = 8.sp,
+                maxLines = 1
+            )
+        },
         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
         singleLine = true,
         enabled = enabled,
         isError = isInvalidClose,
+        textStyle = LocalTextStyle.current.copy(
+            fontSize = 11.sp,
+            textAlign = TextAlign.Start
+        ),
+        contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = MaterialTheme.colorScheme.onSurface,
             unfocusedTextColor = MaterialTheme.colorScheme.onSurface,

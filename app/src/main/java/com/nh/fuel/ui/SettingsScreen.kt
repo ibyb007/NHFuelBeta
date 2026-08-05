@@ -187,7 +187,10 @@ fun SettingsScreen(
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Column(
+                            modifier = Modifier.weight(1f).padding(end = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
                             Text(session.displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                             Text("Role: ${session.role.name}", fontSize = 10.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
                             Text(
@@ -197,14 +200,15 @@ fun SettingsScreen(
                             )
                         }
 
+                        // FIXED: Log Out Button Formatting & Overflow
                         OutlinedButton(
                             onClick = onLogout,
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                            modifier = Modifier.wrapContentWidth()
                         ) {
                             Icon(Icons.Default.Logout, contentDescription = "Log Out", modifier = Modifier.size(13.dp))
                             Spacer(Modifier.width(4.dp))
-                            Text("Log Out", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("Log Out", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1)
                         }
                     }
                 }
@@ -313,7 +317,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // Nav Bar Opacity Card (PLACED ABOVE DEVELOPER ANIMATION)
+                // Nav Bar Opacity Card
                 Card(
                     modifier = Modifier.fillMaxWidth().border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp)),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -337,7 +341,7 @@ fun SettingsScreen(
                     }
                 }
 
-                // DEVELOPER ANIMATED CREDIT SECTION INSIDE SCROLLABLE AREA
+                // DEVELOPER ANIMATED CREDIT SECTION
                 Column(modifier = Modifier.padding(top = 2.dp)) {
                     Text(
                         text = "App developed by:",
@@ -349,7 +353,7 @@ fun SettingsScreen(
                     DeveloperCreditLine()
                 }
 
-                // CENTER BOTTOM VERSION NUMBER (BELOW ANIMATION INSIDE SCROLLABLE AREA)
+                // CENTER BOTTOM VERSION NUMBER
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -413,17 +417,14 @@ private fun LocalBackupScreen(
 
                     val db = FirebaseFirestore.getInstance()
 
-                    // Restore Fuel Records
                     backupObj.records.forEach { rec ->
                         db.collection("daily_fuel_records").document(rec.date).set(rec)
                     }
 
-                    // Restore Expenses
                     backupObj.expenses.forEach { exp ->
                         db.collection("expenses").document(exp.id.toString()).set(exp)
                     }
 
-                    // Restore Credit Records
                     backupObj.credits.forEach { cred ->
                         db.collection("credits").document(cred.id.toString()).set(cred)
                     }
@@ -461,7 +462,6 @@ private fun LocalBackupScreen(
             Text("Encrypted Emergency Backup", fontWeight = FontWeight.Bold, fontSize = 18.sp)
         }
 
-        // Cipher Settings Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -501,7 +501,6 @@ private fun LocalBackupScreen(
             }
         }
 
-        // Backup & Restore Actions Card
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)

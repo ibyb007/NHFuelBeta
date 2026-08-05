@@ -183,8 +183,7 @@ fun ExpendScreenContent(
     val isDayFinalized = allRecords.find { it.date == expenseDateInput }?.shift3?.isComplete == true
 
     val canEdit = !session.isReadOnly &&
-            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
-            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
+            (!isDayFinalized || (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER))
 
     val dayExpenses = remember(allExpenses, expenseDateInput) {
         allExpenses.filter { it.date == expenseDateInput }
@@ -315,14 +314,14 @@ fun ExpendScreenContent(
                             val amount = amountInput.toDoubleOrNull() ?: 0.0
                             if (descriptionInput.isNotBlank() && amount > 0.0 && canEdit) {
                                 val targetDate = expenseDateInput.ifBlank { currentRecordDate }
-                                val nowTimeStr = SimpleDateFormat("hh:mm a", Locale.getDefault()).format(Date())
+                                val realWallClockTime = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                                 onAddOrUpdateExpense(
                                     ExpenseItem(
                                         id = System.currentTimeMillis(),
                                         date = targetDate,
                                         description = descriptionInput.trim(),
                                         amount = amount,
-                                        timestamp = nowTimeStr
+                                        timestamp = realWallClockTime
                                     )
                                 )
                                 ActivityLogger.log(session, "added expense of ₹$amount (${descriptionInput.trim()}) on $targetDate")
@@ -648,11 +647,13 @@ private fun EditExpenseDetailsDialog(
                     Button(onClick = {
                         val newAmount = amountText.toDoubleOrNull() ?: expense.amount
                         if (descText.isNotBlank() && newAmount > 0.0) {
+                            val realWallClockTime = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                             onSave(
                                 expense.copy(
                                     description = descText.trim(),
                                     amount = newAmount,
-                                    date = dateText.trim()
+                                    date = dateText.trim(),
+                                    timestamp = realWallClockTime
                                 )
                             )
                         }
@@ -1023,8 +1024,10 @@ private fun CustomerLedgerDetailScreen(
 
     val canEdit = !session.isReadOnly
 
+    // FIX 1 & 2: Parse notes into individual entries, while guaranteeing the 1st Initial Credit Entry is ALWAYS present
     val parsedLogs = remember(customer.notes, customer.date, customer.totalAmountDue, customer.amountPaid) {
         val list = mutableListOf<InternalLogEntry>()
+        
         if (customer.notes.isNotBlank()) {
             val lines = customer.notes.split("\n")
             lines.forEachIndexed { index, line ->
@@ -1051,7 +1054,7 @@ private fun CustomerLedgerDetailScreen(
                             typeLabel = label,
                             isPayment = isPayment,
                             date = dateMatch,
-                            timestamp = "$dateMatch ${if (timeMatch.isNotBlank()) timeMatch else "12:00 pm"}",
+                            timestamp = if (timeMatch.isNotBlank()) "$dateMatch $timeMatch" else "$dateMatch 12:00 pm",
                             amount = parsedAmt,
                             paymentMode = mode
                         )
@@ -1059,21 +1062,27 @@ private fun CustomerLedgerDetailScreen(
                 }
             }
         }
-        
-        if (list.isEmpty()) {
-            list.add(
-                InternalLogEntry(
-                    id = "init_0",
-                    typeLabel = "Initial Credit Issued",
-                    isPayment = false,
-                    date = customer.date,
-                    timestamp = "${customer.date} 09:00 am",
-                    amount = customer.totalAmountDue,
-                    paymentMode = "(Due)"
-                )
-            )
-        }
-        list
+
+        // Calculate initial credit principal
+        val additionalDues = list.filter { !it.isPayment && it.typeLabel.contains("New Due", ignoreCase = true) }.sumOf { it.amount }
+        val initialAmount = (customer.totalAmountDue - additionalDues).coerceAtLeast(0.0)
+
+        // Prepend Initial Credit Issued entry so it is NEVER lost when 2nd+ entries are added
+        val initialEntry = InternalLogEntry(
+            id = "init_0",
+            typeLabel = "Initial Credit Issued",
+            isPayment = false,
+            date = customer.date,
+            timestamp = "${customer.date} 09:00 am",
+            amount = initialAmount,
+            paymentMode = "(Due)"
+        )
+
+        mutableListOf(initialEntry).apply { addAll(list) }
+    }
+
+    val initialCreditAmount = remember(parsedLogs) {
+        parsedLogs.firstOrNull { it.id == "init_0" }?.amount ?: customer.totalAmountDue
     }
 
     Column(
@@ -1220,7 +1229,7 @@ private fun CustomerLedgerDetailScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text("• Initial Credit Issued on ${customer.date}", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
-                    Text("- ₹ ${String.format(Locale.getDefault(), "%.2f", customer.totalAmountDue)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
+                    Text("- ₹ ${String.format(Locale.getDefault(), "%.2f", initialCreditAmount)}", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = Color(0xFFC62828))
                 }
 
                 if (customer.amountPaid > 0) {
@@ -1340,12 +1349,12 @@ private fun CustomerLedgerDetailScreen(
 
                                     IconButton(
                                         onClick = {
-                                            val newLogList = parsedLogs.filter { it.id != log.id }
+                                            val newLogList = parsedLogs.filter { it.id != log.id && it.id != "init_0" }
                                             val recomputedNotes = newLogList.joinToString("\n") {
                                                 "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
                                             }
                                             val newPaid = newLogList.filter { it.isPayment }.sumOf { it.amount }
-                                            val newTotalDue = newLogList.filter { !it.isPayment }.sumOf { it.amount }
+                                            val newTotalDue = newLogList.filter { !it.isPayment }.sumOf { it.amount } + initialCreditAmount
                                             onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
                                         },
                                         modifier = Modifier.size(22.dp)
@@ -1394,15 +1403,22 @@ private fun CustomerLedgerDetailScreen(
             entry = entry,
             onDismiss = { editingLogEntry = null },
             onSave = { updatedAmt, updatedDate, updatedNote ->
-                val updatedLogs = parsedLogs.map {
-                    if (it.id == entry.id) it.copy(amount = updatedAmt, date = updatedDate, paymentMode = updatedNote) else it
+                val realEditTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
+                if (entry.id == "init_0") {
+                    val additionalDues = parsedLogs.filter { !it.isPayment && it.id != "init_0" }.sumOf { it.amount }
+                    val newTotalDue = updatedAmt + additionalDues
+                    onUpdateCustomer(customer.copy(date = updatedDate, totalAmountDue = newTotalDue))
+                } else {
+                    val updatedLogs = parsedLogs.filter { it.id != "init_0" }.map {
+                        if (it.id == entry.id) it.copy(amount = updatedAmt, date = updatedDate, paymentMode = updatedNote, timestamp = realEditTimestamp) else it
+                    }
+                    val recomputedNotes = updatedLogs.joinToString("\n") {
+                        "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
+                    }
+                    val newPaid = updatedLogs.filter { it.isPayment }.sumOf { it.amount }
+                    val newTotalDue = updatedLogs.filter { !it.isPayment }.sumOf { it.amount } + initialCreditAmount
+                    onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
                 }
-                val recomputedNotes = updatedLogs.joinToString("\n") {
-                    "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
-                }
-                val newPaid = updatedLogs.filter { it.isPayment }.sumOf { it.amount }
-                val newTotalDue = updatedLogs.filter { !it.isPayment }.sumOf { it.amount }
-                onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
                 editingLogEntry = null
             }
         )
@@ -1599,8 +1615,7 @@ private fun AddEditCreditDialog(
     val isDayFinalized = allRecords.find { it.date == entryDate }?.shift3?.isComplete == true
 
     val canEdit = !session.isReadOnly &&
-            (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER) &&
-            (!isDayFinalized || session.isOwnerLogin || session.role != Role.MANAGER)
+            (!isDayFinalized || (!isPastDate || session.canEditPastDates || session.isOwnerLogin || session.role != Role.MANAGER))
 
     val fuelRates = remember(entryDate, allRecords) {
         val exactRecord = allRecords.find { it.date == entryDate }

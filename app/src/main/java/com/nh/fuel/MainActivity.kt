@@ -48,7 +48,6 @@ class MainActivity : ComponentActivity() {
             navigationBarStyle = SystemBarStyle.auto(Color.TRANSPARENT, Color.TRANSPARENT)
         )
         super.onCreate(savedInstanceState)
-
         appPreferences = AppPreferences(applicationContext)
 
         setContent {
@@ -73,11 +72,9 @@ class MainActivity : ComponentActivity() {
                 val context = LocalContext.current
                 val firestoreRepository = remember { FirestoreRepository() }
 
-                // Session State Management & Auto-Login Restorer
                 var currentSession by remember { mutableStateOf<AppUserSession?>(null) }
                 var isCheckingSession by remember { mutableStateOf(true) }
 
-                // Check for existing saved session on cold start
                 LaunchedEffect(Unit) {
                     currentSession = UserSessionManager.getSavedSession(context)
                     isCheckingSession = false
@@ -89,7 +86,6 @@ class MainActivity : ComponentActivity() {
                     if (!session.isOwnerLogin) {
                         val db = FirebaseFirestore.getInstance()
                         val cleanCode = session.emailOrKey.replace(Regex("[^A-Za-z0-9]"), "").uppercase()
-
                         db.collection("access_keys")
                             .addSnapshotListener { snapshot, _ ->
                                 if (snapshot != null) {
@@ -99,22 +95,22 @@ class MainActivity : ComponentActivity() {
                                     }
                                     val keyObj = matchingDoc?.toObject(StaffAccessKey::class.java)
 
-                                    // Kick out immediately if key is deleted or revoked
                                     if (matchingDoc == null || keyObj?.status != KeyStatus.ACTIVE) {
                                         coroutineScope.launch {
                                             UserSessionManager.clearSession(context)
                                             currentSession = null
                                         }
                                     } else {
-                                        // Instantly sync changes to role, read-only mode, and past date access
                                         val updatedSession = session.copy(
                                             canEditPastDates = keyObj.canEditPastDates,
+                                            canEditFinancePastDates = keyObj.canEditFinancePastDates,
                                             role = keyObj.role,
                                             isReadOnly = keyObj.isReadOnly,
                                             displayName = keyObj.nickname
                                         )
                                         if (updatedSession.isReadOnly != currentSession?.isReadOnly ||
                                             updatedSession.canEditPastDates != currentSession?.canEditPastDates ||
+                                            updatedSession.canEditFinancePastDates != currentSession?.canEditFinancePastDates ||
                                             updatedSession.role != currentSession?.role ||
                                             updatedSession.displayName != currentSession?.displayName
                                         ) {
@@ -148,26 +144,21 @@ class MainActivity : ComponentActivity() {
                 } else {
                     val activeSession = currentSession!!
 
-                    // --- REALTIME FIRESTORE MULTI-DEVICE SYNC ---
                     val allRecordsFlow = firestoreRepository.observeAllFuelRecords().collectAsState(initial = emptyList())
                     val allRecords = allRecordsFlow.value
-
                     val allExpensesFlow = firestoreRepository.observeAllExpenses().collectAsState(initial = emptyList())
                     val allExpenses = allExpensesFlow.value
-
                     val allCreditsFlow = firestoreRepository.observeAllCredits().collectAsState(initial = emptyList())
                     val allCredits = allCreditsFlow.value
 
-                    // Default active date to today on initial startup
                     var activeBusinessDate by remember {
                         mutableStateOf(
                             SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
                         )
                     }
 
-                    // Cold-start anchor: Only set initial date once when records first load,
-                    // so editing past dates doesn't trigger unwanted resets.
                     var hasAnchoredInitialDate by remember { mutableStateOf(false) }
+
                     LaunchedEffect(allRecords) {
                         if (!hasAnchoredInitialDate && allRecords.isNotEmpty()) {
                             val unfinalizedRecord = allRecords.sortedBy { it.date }.find { !it.shift3.isComplete }
@@ -183,7 +174,6 @@ class MainActivity : ComponentActivity() {
 
                     val dbRecord = allRecords.find { it.date == activeBusinessDate }
 
-                    // Active business record state management
                     val currentRecord = remember(dbRecord, activeBusinessDate, allRecords) {
                         if (dbRecord != null) {
                             dbRecord

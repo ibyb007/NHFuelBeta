@@ -70,8 +70,6 @@ fun SalesScreen(
 
     val isAdminOrOwner = session.isOwnerLogin || session.role == Role.SUPER_ADMIN || session.role == Role.ADMIN
 
-    // UPDATED PERMISSION GUARD LOGIC FOR SALESSCREEN:
-    // If the day is unfinalized (!isDayFinalized), managers can input and edit sales/collections data freely.
     val canEdit = if (isAdminOrOwner) {
         true
     } else {
@@ -688,14 +686,15 @@ private fun MpdSalesColumn(
     val mpdRevenue = petrolRev + dieselRev
     val mpdMismatch = dispenser.getMismatch(petrolPrice, dieselPrice)
 
-    var cashText by remember(dispenser.cashCollected) {
-        mutableStateOf(if (dispenser.cashCollected == 0.0) "" else dispenser.cashCollected.toString())
+    // INDEPENDENT RAW STRING STATES PREVENT TEXT CURSOR JUMPING & ERASING DECIMALS MID-TYPING
+    var cashText by remember {
+        mutableStateOf(if (dispenser.cashCollected == 0.0) "" else if (dispenser.cashCollected % 1.0 == 0.0) dispenser.cashCollected.toLong().toString() else dispenser.cashCollected.toString())
     }
-    var digitalText by remember(dispenser.digitalCollected) {
-        mutableStateOf(if (dispenser.digitalCollected == 0.0) "" else dispenser.digitalCollected.toString())
+    var digitalText by remember {
+        mutableStateOf(if (dispenser.digitalCollected == 0.0) "" else if (dispenser.digitalCollected % 1.0 == 0.0) dispenser.digitalCollected.toLong().toString() else dispenser.digitalCollected.toString())
     }
-    var creditText by remember(dispenser.creditCollected) {
-        mutableStateOf(if (dispenser.creditCollected == 0.0) "" else dispenser.creditCollected.toString())
+    var creditText by remember {
+        mutableStateOf(if (dispenser.creditCollected == 0.0) "" else if (dispenser.creditCollected % 1.0 == 0.0) dispenser.creditCollected.toLong().toString() else dispenser.creditCollected.toString())
     }
 
     Card(

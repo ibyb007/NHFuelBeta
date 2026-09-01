@@ -27,6 +27,7 @@ import com.nh.fuel.data.DispenserShift
 import com.nh.fuel.data.FirestoreRepository
 import com.nh.fuel.data.KeyStatus
 import com.nh.fuel.data.NozzleShift
+import com.nh.fuel.data.RefillEvent
 import com.nh.fuel.data.Role
 import com.nh.fuel.data.StaffAccessKey
 import com.nh.fuel.data.UserSessionManager
@@ -211,17 +212,17 @@ class MainActivity : ComponentActivity() {
                                 DailyFuelRecord(
                                     date = activeBusinessDate,
                                     petrolTotal = previousRecord.currentPetrolStorage,
-                                    petrolRefill = previousRecord.petrolRefill,
+                                    petrolRefill = 0.0,
                                     petrolVariation = previousRecord.petrolVariation,
-                                    lastPetrolRefill = previousRecord.lastPetrolRefill,
+                                    lastPetrolRefill = RefillEvent(),
                                     lastPetrolVariationAmount = previousRecord.lastPetrolVariationAmount,
                                     lastPetrolVariationTime = previousRecord.lastPetrolVariationTime,
                                     lastPetrolDipAmount = previousRecord.lastPetrolDipAmount,
                                     lastPetrolDipTime = previousRecord.lastPetrolDipTime,
                                     dieselTotal = previousRecord.currentDieselStorage,
-                                    dieselRefill = previousRecord.dieselRefill,
+                                    dieselRefill = 0.0,
                                     dieselVariation = previousRecord.dieselVariation,
-                                    lastDieselRefill = previousRecord.lastDieselRefill,
+                                    lastDieselRefill = RefillEvent(),
                                     lastDieselVariationAmount = previousRecord.lastDieselVariationAmount,
                                     lastDieselVariationTime = previousRecord.lastDieselVariationTime,
                                     lastDieselDipAmount = previousRecord.lastDieselDipAmount,

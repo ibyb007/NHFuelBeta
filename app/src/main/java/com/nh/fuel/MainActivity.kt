@@ -20,6 +20,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.view.WindowCompat
 import com.google.firebase.firestore.FirebaseFirestore
+import com.nh.fuel.data.ActivityLogger
 import com.nh.fuel.data.AppUserSession
 import com.nh.fuel.data.DailyFuelRecord
 import com.nh.fuel.data.DayShift
@@ -241,6 +242,16 @@ class MainActivity : ComponentActivity() {
                         initial = AppPreferences.DEFAULT_GLASS_OPACITY
                     )
 
+                    val activityLogEnabled by appPreferences.activityLogEnabledFlow.collectAsState(
+                        initial = AppPreferences.DEFAULT_ACTIVITY_LOG_ENABLED
+                    )
+
+                    // Keep the (in-memory) ActivityLogger master switch in sync with the
+                    // persisted preference so log() calls anywhere in the app respect it.
+                    LaunchedEffect(activityLogEnabled) {
+                        ActivityLogger.setEnabled(activityLogEnabled)
+                    }
+
                     MainContainerScreen(
                         session = activeSession,
                         record = currentRecord,
@@ -249,6 +260,32 @@ class MainActivity : ComponentActivity() {
                         allCredits = allCredits,
                         navBarOpacity = navBarOpacity,
                         themeMode = themeMode,
+                        activityLogEnabled = activityLogEnabled,
+                        onActivityLogEnabledChanged = { enabled ->
+                            coroutineScope.launch {
+                                appPreferences.saveActivityLogEnabled(enabled)
+                            }
+                        },
+                        onDeleteDayData = { targetDate ->
+                            val isSuperAdmin = activeSession.isOwnerLogin || activeSession.role == Role.SUPER_ADMIN
+                            if (isSuperAdmin) {
+                                coroutineScope.launch {
+                                    try {
+                                        allExpenses.filter { it.date == targetDate }.forEach { expense ->
+                                            firestoreRepository.deleteExpense(expense)
+                                        }
+                                        allCredits.filter { it.date == targetDate }.forEach { credit ->
+                                            firestoreRepository.deleteCredit(credit)
+                                        }
+                                        firestoreRepository.deleteFuelRecord(targetDate)
+                                        Toast.makeText(context, "All data for $targetDate has been deleted.", Toast.LENGTH_LONG).show()
+                                        ActivityLogger.log(activeSession, "deleted ALL data (sales, expenses & credits) for $targetDate")
+                                    } catch (e: Exception) {
+                                        Toast.makeText(context, "Failed to delete day data: ${e.message}", Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        },
                         onRecordChanged = { updatedRecord ->
                             if (!activeSession.isReadOnly) {
                                 coroutineScope.launch {

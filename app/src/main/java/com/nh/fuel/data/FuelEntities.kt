@@ -3,7 +3,6 @@ package com.nh.fuel.data
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import com.google.firebase.firestore.IgnoreExtraProperties
-import kotlin.math.max
 
 @IgnoreExtraProperties
 data class RefillEvent(
@@ -28,7 +27,10 @@ data class NozzleShift(
 ) {
     val isValid: Boolean get() = close >= open || close == 0.0
     val grossSale: Double get() = if (close >= open && close > 0.0) close - open else 0.0
-    val sale: Double get() = max(0.0, grossSale - testing)
+    // Testing fuel is dispensed through the meter but returned to the tank, so it must always be
+    // subtracted in full. Do NOT clamp per nozzle: a nozzle with less meter movement than its test
+    // litres (or not yet closed) would otherwise silently "lose" part of the test amount.
+    val sale: Double get() = grossSale - testing
     val isClosed: Boolean get() = close > 0.0 && close >= open
 }
 

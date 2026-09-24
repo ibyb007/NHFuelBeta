@@ -31,6 +31,9 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -583,9 +586,9 @@ fun HomeScreenContent(
             }
         }
 
-        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(modifier = Modifier.fillMaxWidth().height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FuelTankCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 title = "Petrol Tank Storage",
                 color = petrolColor,
                 stockColor = stockColor,
@@ -680,7 +683,7 @@ fun HomeScreenContent(
             )
 
             FuelTankCard(
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).fillMaxHeight(),
                 title = "Diesel Tank Storage",
                 color = dieselColor,
                 stockColor = stockColor,
@@ -1182,6 +1185,8 @@ fun HomeScreenContent(
     }
 }
 
+private val DipRowHeight = 56.dp
+
 @Composable
 fun FuelTankCard(
     modifier: Modifier = Modifier,
@@ -1204,6 +1209,8 @@ fun FuelTankCard(
     onUndoLastRefill: () -> Unit
 ) {
     var isEditingExactStock by remember { mutableStateOf(false) }
+    val dipFocusRequester = remember { FocusRequester() }
+    var dipHadFocus by remember { mutableStateOf(false) }
     var pendingInput by remember(exactStock) {
         mutableStateOf(if (exactStock == 0.0) "" else if (exactStock % 1.0 == 0.0) exactStock.toLong().toString() else exactStock.toString())
     }
@@ -1212,11 +1219,20 @@ fun FuelTankCard(
     var showUndoDipDialog by remember { mutableStateOf(false) }
     var showUndoRefillDialog by remember { mutableStateOf(false) }
 
+    // Focus the dip box as soon as it opens so that tapping anywhere else (another box, the other
+    // card, etc.) can be detected as "focus lost" and close it without saving.
+    LaunchedEffect(isEditingExactStock) {
+        if (isEditingExactStock) {
+            dipHadFocus = false
+            dipFocusRequester.requestFocus()
+        }
+    }
+
     Card(
         modifier = modifier.border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(8.dp)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
-        Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Column(modifier = Modifier.fillMaxHeight().padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(title, fontWeight = FontWeight.Bold, color = color, fontSize = 12.sp)
 
             Column {
@@ -1226,7 +1242,7 @@ fun FuelTankCard(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Start,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(DipRowHeight)
                     ) {
                         Text(
                             text = "${formatDecimal(exactStock)} L",
@@ -1253,7 +1269,7 @@ fun FuelTankCard(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth().height(DipRowHeight)
                     ) {
                         OutlinedTextField(
                             value = pendingInput,
@@ -1266,7 +1282,19 @@ fun FuelTankCard(
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             singleLine = true,
                             enabled = canEdit,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(dipFocusRequester)
+                                .onFocusChanged { state ->
+                                    if (state.isFocused) {
+                                        dipHadFocus = true
+                                    } else if (dipHadFocus && !showConfirmationDialog) {
+                                        // Tapped elsewhere without saving: discard and close.
+                                        dipHadFocus = false
+                                        isEditingExactStock = false
+                                        pendingInput = if (exactStock == 0.0) "" else if (exactStock % 1.0 == 0.0) exactStock.toLong().toString() else exactStock.toString()
+                                    }
+                                }
                         )
                         IconButton(
                             onClick = {
@@ -1386,6 +1414,8 @@ fun FuelTankCard(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
+
+            Spacer(Modifier.weight(1f))
 
             HorizontalDivider(modifier = Modifier.padding(vertical = 2.dp), color = MaterialTheme.colorScheme.outlineVariant)
 

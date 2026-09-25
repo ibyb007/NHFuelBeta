@@ -37,7 +37,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-enum class ExpensePeriodFilter { ALL_TIME, THIS_MONTH, THIS_YEAR, CUSTOM }
+enum class ExpensePeriodFilter { TODAY, ALL_TIME, THIS_MONTH, THIS_YEAR, CUSTOM }
 
 data class InternalLogEntry(
     val id: String,
@@ -174,7 +174,7 @@ fun ExpendScreenContent(
     var showDatePickerModal by remember { mutableStateOf(false) }
 
     var editingExpense by remember { mutableStateOf<ExpenseItem?>(null) }
-    var selectedAggFilter by remember { mutableStateOf(ExpensePeriodFilter.ALL_TIME) }
+    var selectedAggFilter by remember { mutableStateOf(ExpensePeriodFilter.TODAY) }
     var customFromDate by remember { mutableStateOf(currentRecordDate) }
     var customToDate by remember { mutableStateOf(currentRecordDate) }
 
@@ -187,6 +187,17 @@ fun ExpendScreenContent(
             (!isDayFinalized || hasPastPrivilege) &&
             (!isPastDate || hasPastPrivilege)
 
+    // Whether a specific (possibly different) expense date can be edited/deleted right now -
+    // needed once the log below can show entries from many different dates (THIS_MONTH,
+    // THIS_YEAR, CUSTOM, ALL_TIME), each of which may have its own past-date/finalized lock.
+    fun canEditEntryOn(entryDate: String): Boolean {
+        val entryIsPastDate = entryDate < todayStr
+        val entryIsDayFinalized = allRecords.find { it.date == entryDate }?.shift3?.isComplete == true
+        return !session.isReadOnly &&
+                (!entryIsDayFinalized || hasPastPrivilege) &&
+                (!entryIsPastDate || hasPastPrivilege)
+    }
+
     val dayExpenses = remember(allExpenses, expenseDateInput) {
         allExpenses.filter { it.date == expenseDateInput }
     }
@@ -194,17 +205,29 @@ fun ExpendScreenContent(
         dayExpenses.sumOf { it.amount }
     }
 
-    val aggregatedExpenseTotal = remember(allExpenses, selectedAggFilter, expenseDateInput, customFromDate, customToDate) {
+    // The period the "TODAY" chip and the others describe, in one line, for the log header.
+    val periodLabel = when (selectedAggFilter) {
+        ExpensePeriodFilter.TODAY -> expenseDateInput
+        ExpensePeriodFilter.ALL_TIME -> "All Time"
+        ExpensePeriodFilter.THIS_MONTH -> expenseDateInput.take(7)
+        ExpensePeriodFilter.THIS_YEAR -> expenseDateInput.take(4)
+        ExpensePeriodFilter.CUSTOM -> "$customFromDate to $customToDate"
+    }
+
+    // All expense entries within the currently selected period, newest first - this is what the
+    // "Expense Log" list below shows. TODAY keeps the original single-date-only behaviour.
+    val periodExpenses = remember(allExpenses, selectedAggFilter, expenseDateInput, customFromDate, customToDate) {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
-        when (selectedAggFilter) {
-            ExpensePeriodFilter.ALL_TIME -> allExpenses.sumOf { it.amount }
+        val filtered = when (selectedAggFilter) {
+            ExpensePeriodFilter.TODAY -> allExpenses.filter { it.date == expenseDateInput }
+            ExpensePeriodFilter.ALL_TIME -> allExpenses
             ExpensePeriodFilter.THIS_MONTH -> {
                 val currentMonth = expenseDateInput.take(7)
-                allExpenses.filter { it.date.startsWith(currentMonth) }.sumOf { it.amount }
+                allExpenses.filter { it.date.startsWith(currentMonth) }
             }
             ExpensePeriodFilter.THIS_YEAR -> {
                 val currentYear = expenseDateInput.take(4)
-                allExpenses.filter { it.date.startsWith(currentYear) }.sumOf { it.amount }
+                allExpenses.filter { it.date.startsWith(currentYear) }
             }
             ExpensePeriodFilter.CUSTOM -> {
                 val fromD = try { sdf.parse(customFromDate) } catch (e: Exception) { null }
@@ -213,10 +236,15 @@ fun ExpendScreenContent(
                     allExpenses.filter { exp ->
                         val expD = try { sdf.parse(exp.date) } catch (e: Exception) { null }
                         expD != null && !expD.before(fromD) && !expD.after(toD)
-                    }.sumOf { it.amount }
-                } else allExpenses.sumOf { it.amount }
+                    }
+                } else allExpenses
             }
         }
+        filtered.sortedWith(compareByDescending<ExpenseItem> { it.date }.thenByDescending { it.id })
+    }
+
+    val aggregatedExpenseTotal = remember(periodExpenses) {
+        periodExpenses.sumOf { it.amount }
     }
 
     LazyColumn(
@@ -360,7 +388,7 @@ fun ExpendScreenContent(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "Aggregated Expenses ($expenseDateInput):",
+                            text = "Today's Expenses ($expenseDateInput):",
                             fontWeight = FontWeight.Bold,
                             fontSize = 11.sp,
                             color = MaterialTheme.colorScheme.onSurface
@@ -434,17 +462,17 @@ fun ExpendScreenContent(
 
         item {
             Text(
-                text = "Expense Log (${dayExpenses.size} items for $expenseDateInput):",
+                text = "Expense Log (${periodExpenses.size} items for $periodLabel):",
                 fontWeight = FontWeight.Bold,
                 fontSize = 13.sp,
                 color = MaterialTheme.colorScheme.onBackground
             )
         }
 
-        items(dayExpenses, key = { it.id }) { item ->
+        items(periodExpenses, key = { it.id }) { item ->
             ExpenseCardBlock(
                 item = item,
-                canEdit = canEdit,
+                canEdit = canEditEntryOn(item.date),
                 onEdit = { editingExpense = item },
                 onDelete = {
                     onDeleteExpense(item)

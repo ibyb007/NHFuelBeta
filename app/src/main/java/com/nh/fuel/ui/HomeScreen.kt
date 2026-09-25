@@ -604,7 +604,7 @@ fun HomeScreenContent(
                 canEdit = canEditDate,
                 onConfirmExactStock = { confirmedVal, diff ->
                     if (!canEditDate) return@FuelTankCard
-                    val clampedVal = max(0.0, confirmedVal)
+                    val clampedVal = round2(max(0.0, confirmedVal))
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                     val isFirstEntry = record.petrolTotal == 0.0 && record.lastPetrolDipAmount == 0.0
 
@@ -618,8 +618,8 @@ fun HomeScreenContent(
                             )
                         )
                     } else if (diff != 0.0) {
-                        val newVariation = record.petrolVariation + diff
-                        val requiredTotal = clampedVal + record.totalPetrolSell - record.petrolRefill - newVariation
+                        val newVariation = round2(record.petrolVariation + diff)
+                        val requiredTotal = round2(clampedVal + record.totalPetrolSell - record.petrolRefill - newVariation)
                         onRecordChanged(
                             record.copy(
                                 petrolTotal = max(0.0, requiredTotal),
@@ -632,7 +632,7 @@ fun HomeScreenContent(
                             )
                         )
                     } else {
-                        val requiredTotal = clampedVal + record.totalPetrolSell - record.petrolRefill - record.petrolVariation
+                        val requiredTotal = round2(clampedVal + record.totalPetrolSell - record.petrolRefill - record.petrolVariation)
                         onRecordChanged(
                             record.copy(
                                 petrolTotal = max(0.0, requiredTotal),
@@ -647,7 +647,7 @@ fun HomeScreenContent(
                     if (!canEditDate) return@FuelTankCard
                     onRecordChanged(
                         record.copy(
-                            petrolVariation = record.petrolVariation - record.lastPetrolVariationAmount,
+                            petrolVariation = round2(record.petrolVariation - record.lastPetrolVariationAmount),
                             lastPetrolVariationAmount = 0.0,
                             lastPetrolVariationTime = "",
                             lastPetrolDipAmount = 0.0,
@@ -659,8 +659,8 @@ fun HomeScreenContent(
                 onAddRefill = { addedLitre ->
                     if (!canEditDate) return@FuelTankCard
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
-                    val validAdded = max(0.0, addedLitre)
-                    val newRefill = record.petrolRefill + validAdded
+                    val validAdded = round2(max(0.0, addedLitre))
+                    val newRefill = round2(record.petrolRefill + validAdded)
                     onRecordChanged(
                         record.copy(
                             petrolRefill = newRefill,
@@ -674,7 +674,7 @@ fun HomeScreenContent(
                     val lastAmount = record.lastPetrolRefill.amount
                     onRecordChanged(
                         record.copy(
-                            petrolRefill = max(0.0, record.petrolRefill - lastAmount),
+                            petrolRefill = round2(max(0.0, record.petrolRefill - lastAmount)),
                             lastPetrolRefill = RefillEvent(),
                             lastUpdatedTimestamp = System.currentTimeMillis()
                         )
@@ -699,7 +699,7 @@ fun HomeScreenContent(
                 canEdit = canEditDate,
                 onConfirmExactStock = { confirmedVal, diff ->
                     if (!canEditDate) return@FuelTankCard
-                    val clampedVal = max(0.0, confirmedVal)
+                    val clampedVal = round2(max(0.0, confirmedVal))
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                     val isFirstEntry = record.dieselTotal == 0.0 && record.lastDieselDipAmount == 0.0
 
@@ -713,8 +713,8 @@ fun HomeScreenContent(
                             )
                         )
                     } else if (diff != 0.0) {
-                        val newVariation = record.dieselVariation + diff
-                        val requiredTotal = clampedVal + record.totalDieselSell - record.dieselRefill - newVariation
+                        val newVariation = round2(record.dieselVariation + diff)
+                        val requiredTotal = round2(clampedVal + record.totalDieselSell - record.dieselRefill - newVariation)
                         onRecordChanged(
                             record.copy(
                                 dieselTotal = max(0.0, requiredTotal),
@@ -727,7 +727,7 @@ fun HomeScreenContent(
                             )
                         )
                     } else {
-                        val requiredTotal = clampedVal + record.totalDieselSell - record.dieselRefill - record.dieselVariation
+                        val requiredTotal = round2(clampedVal + record.totalDieselSell - record.dieselRefill - record.dieselVariation)
                         onRecordChanged(
                             record.copy(
                                 dieselTotal = max(0.0, requiredTotal),
@@ -742,7 +742,7 @@ fun HomeScreenContent(
                     if (!canEditDate) return@FuelTankCard
                     onRecordChanged(
                         record.copy(
-                            dieselVariation = record.dieselVariation - record.lastDieselVariationAmount,
+                            dieselVariation = round2(record.dieselVariation - record.lastDieselVariationAmount),
                             lastDieselVariationAmount = 0.0,
                             lastDieselVariationTime = "",
                             lastDieselDipAmount = 0.0,
@@ -754,8 +754,8 @@ fun HomeScreenContent(
                 onAddRefill = { addedLitre ->
                     if (!canEditDate) return@FuelTankCard
                     val nowStr = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
-                    val validAdded = max(0.0, addedLitre)
-                    val newRefill = record.dieselRefill + validAdded
+                    val validAdded = round2(max(0.0, addedLitre))
+                    val newRefill = round2(record.dieselRefill + validAdded)
                     onRecordChanged(
                         record.copy(
                             dieselRefill = newRefill,
@@ -769,7 +769,7 @@ fun HomeScreenContent(
                     val lastAmount = record.lastDieselRefill.amount
                     onRecordChanged(
                         record.copy(
-                            dieselRefill = max(0.0, record.dieselRefill - lastAmount),
+                            dieselRefill = round2(max(0.0, record.dieselRefill - lastAmount)),
                             lastDieselRefill = RefillEvent(),
                             lastUpdatedTimestamp = System.currentTimeMillis()
                         )
@@ -1187,6 +1187,13 @@ fun HomeScreenContent(
 
 private val DipRowHeight = 56.dp
 
+// Dip box text: rounded to at most 2 decimals, trailing zeros trimmed (6824.50 -> 6824.5).
+private fun formatDipInput(value: Double): String {
+    if (value == 0.0) return ""
+    return java.math.BigDecimal(value).setScale(2, java.math.RoundingMode.HALF_UP)
+        .stripTrailingZeros().toPlainString()
+}
+
 @Composable
 fun FuelTankCard(
     modifier: Modifier = Modifier,
@@ -1212,7 +1219,7 @@ fun FuelTankCard(
     val dipFocusRequester = remember { FocusRequester() }
     var dipHadFocus by remember { mutableStateOf(false) }
     var pendingInput by remember(exactStock) {
-        mutableStateOf(if (exactStock == 0.0) "" else if (exactStock % 1.0 == 0.0) exactStock.toLong().toString() else exactStock.toString())
+        mutableStateOf(formatDipInput(exactStock))
     }
     var newRefillInput by remember { mutableStateOf("") }
     var showConfirmationDialog by remember { mutableStateOf(false) }
@@ -1242,7 +1249,7 @@ fun FuelTankCard(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.Start,
-                        modifier = Modifier.fillMaxWidth().height(DipRowHeight)
+                        modifier = Modifier.fillMaxWidth().heightIn(min = DipRowHeight)
                     ) {
                         Text(
                             text = "${formatDecimal(exactStock)} L",
@@ -1269,12 +1276,12 @@ fun FuelTankCard(
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.fillMaxWidth().height(DipRowHeight)
+                        modifier = Modifier.fillMaxWidth().heightIn(min = DipRowHeight)
                     ) {
                         OutlinedTextField(
                             value = pendingInput,
                             onValueChange = { input ->
-                                if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
+                                if (canEdit && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d{0,2}$")))) {
                                     pendingInput = input
                                 }
                             },
@@ -1292,7 +1299,7 @@ fun FuelTankCard(
                                         // Tapped elsewhere without saving: discard and close.
                                         dipHadFocus = false
                                         isEditingExactStock = false
-                                        pendingInput = if (exactStock == 0.0) "" else if (exactStock % 1.0 == 0.0) exactStock.toLong().toString() else exactStock.toString()
+                                        pendingInput = formatDipInput(exactStock)
                                     }
                                 }
                         )
@@ -1432,8 +1439,8 @@ fun FuelTankCard(
     }
 
     if (showConfirmationDialog) {
-        val targetVal = max(0.0, pendingInput.toDoubleOrNull() ?: currentStorage)
-        val diff = targetVal - currentStorage
+        val targetVal = round2(max(0.0, pendingInput.toDoubleOrNull() ?: currentStorage))
+        val diff = round2(targetVal - currentStorage)
 
         AlertDialog(
             onDismissRequest = { showConfirmationDialog = false },
@@ -1759,9 +1766,11 @@ fun NumberField(
     OutlinedTextField(
         value = textValue,
         onValueChange = { input ->
-            if (enabled && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d*$")))) {
+            // Limit to at most 2 decimal places at entry time so litres are never stored (or
+            // synced to Firebase) with floating-point noise beyond 2 decimals.
+            if (enabled && (input.isEmpty() || input.matches(Regex("^\\d*\\.?\\d{0,2}$")))) {
                 textValue = input
-                val parsed = input.toDoubleOrNull() ?: 0.0
+                val parsed = round2(input.toDoubleOrNull() ?: 0.0)
                 onValueChange(parsed)
             }
         },

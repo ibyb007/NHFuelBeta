@@ -313,7 +313,7 @@ fun ExpendScreenContent(
 
                     Button(
                         onClick = {
-                            val amount = amountInput.toDoubleOrNull() ?: 0.0
+                            val amount = round2(amountInput.toDoubleOrNull() ?: 0.0)
                             if (descriptionInput.isNotBlank() && amount > 0.0 && canEdit) {
                                 val targetDate = expenseDateInput.ifBlank { currentRecordDate }
                                 val realWallClockTime = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
@@ -647,7 +647,7 @@ private fun EditExpenseDetailsDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
                     Button(onClick = {
-                        val newAmount = amountText.toDoubleOrNull() ?: expense.amount
+                        val newAmount = round2(amountText.toDoubleOrNull() ?: expense.amount)
                         if (descText.isNotBlank() && newAmount > 0.0) {
                             val realWallClockTime = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                             onSave(
@@ -1356,10 +1356,10 @@ private fun CustomerLedgerDetailScreen(
                                         onClick = {
                                             val newLogList = parsedLogs.filter { it.id != log.id && it.id != "init_0" }
                                             val recomputedNotes = newLogList.joinToString("\n") {
-                                                "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
+                                                "• ${it.typeLabel}: ₹ ${String.format(Locale.US, "%.2f", it.amount)} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
                                             }
-                                            val newPaid = newLogList.filter { it.isPayment }.sumOf { it.amount }
-                                            val newTotalDue = newLogList.filter { !it.isPayment }.sumOf { it.amount } + initialCreditAmount
+                                            val newPaid = round2(newLogList.filter { it.isPayment }.sumOf { it.amount })
+                                            val newTotalDue = round2(newLogList.filter { !it.isPayment }.sumOf { it.amount } + initialCreditAmount)
                                             onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
                                         },
                                         modifier = Modifier.size(22.dp)
@@ -1412,17 +1412,17 @@ private fun CustomerLedgerDetailScreen(
                 val originalTimestamp = entry.timestamp
                 if (entry.id == "init_0") {
                     val additionalDues = parsedLogs.filter { !it.isPayment && it.id != "init_0" }.sumOf { it.amount }
-                    val newTotalDue = updatedAmt + additionalDues
+                    val newTotalDue = round2(updatedAmt + additionalDues)
                     onUpdateCustomer(customer.copy(date = updatedDate, totalAmountDue = newTotalDue))
                 } else {
                     val updatedLogs = parsedLogs.filter { it.id != "init_0" }.map {
                         if (it.id == entry.id) it.copy(amount = updatedAmt, date = updatedDate, paymentMode = updatedNote, timestamp = originalTimestamp) else it
                     }
                     val recomputedNotes = updatedLogs.joinToString("\n") {
-                        "• ${it.typeLabel}: ₹ ${it.amount} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
+                        "• ${it.typeLabel}: ₹ ${String.format(Locale.US, "%.2f", it.amount)} on ${it.date} @ ${it.timestamp} (${it.paymentMode})"
                     }
-                    val newPaid = updatedLogs.filter { it.isPayment }.sumOf { it.amount }
-                    val newTotalDue = updatedLogs.filter { !it.isPayment }.sumOf { it.amount } + initialCreditAmount
+                    val newPaid = round2(updatedLogs.filter { it.isPayment }.sumOf { it.amount })
+                    val newTotalDue = round2(updatedLogs.filter { !it.isPayment }.sumOf { it.amount } + initialCreditAmount)
                     onUpdateCustomer(customer.copy(notes = recomputedNotes, amountPaid = newPaid, totalAmountDue = newTotalDue))
                 }
                 editingLogEntry = null
@@ -1503,7 +1503,7 @@ private fun EditLogEntryModal(
         confirmButton = {
             Button(
                 onClick = {
-                    val parsed = amountText.toDoubleOrNull() ?: entry.amount
+                    val parsed = round2(amountText.toDoubleOrNull() ?: entry.amount)
                     if (parsed > 0.0) {
                         onSave(parsed, dateText.trim(), noteText.trim())
                     }
@@ -1726,7 +1726,7 @@ private fun AddEditCreditDialog(
                             if (!isCalculatingInternal && canEdit) {
                                 isCalculatingInternal = true
                                 val litres = input.toDoubleOrNull() ?: 0.0
-                                val calculated = litres * petrolRate
+                                val calculated = round2(litres * petrolRate)
                                 addedAmountText = if (calculated > 0.0) String.format(Locale.US, "%.2f", calculated) else ""
                                 isCalculatingInternal = false
                             }
@@ -1747,7 +1747,7 @@ private fun AddEditCreditDialog(
                             if (!isCalculatingInternal && canEdit) {
                                 isCalculatingInternal = true
                                 val litres = input.toDoubleOrNull() ?: 0.0
-                                val calculated = litres * dieselRate
+                                val calculated = round2(litres * dieselRate)
                                 addedAmountText = if (calculated > 0.0) String.format(Locale.US, "%.2f", calculated) else ""
                                 isCalculatingInternal = false
                             }
@@ -1769,11 +1769,11 @@ private fun AddEditCreditDialog(
                             val amount = input.toDoubleOrNull() ?: 0.0
                             when (selectedFuelType) {
                                 CreditFuelType.PETROL -> {
-                                    val litres = if (petrolRate > 0) amount / petrolRate else 0.0
+                                    val litres = if (petrolRate > 0) round2(amount / petrolRate) else 0.0
                                     petrolLitreText = if (litres > 0.0) String.format(Locale.US, "%.2f", litres) else ""
                                 }
                                 CreditFuelType.DIESEL -> {
-                                    val litres = if (dieselRate > 0) amount / dieselRate else 0.0
+                                    val litres = if (dieselRate > 0) round2(amount / dieselRate) else 0.0
                                     dieselLitreText = if (litres > 0.0) String.format(Locale.US, "%.2f", litres) else ""
                                 }
                                 else -> {}
@@ -1796,19 +1796,19 @@ private fun AddEditCreditDialog(
                     Spacer(Modifier.width(8.dp))
                     Button(
                         onClick = {
-                            val enteredDue = addedAmountText.toDoubleOrNull() ?: 0.0
+                            val enteredDue = round2(addedAmountText.toDoubleOrNull() ?: 0.0)
                             if (enteredDue > 0.0 && canEdit) {
                                 val realWallClockTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                                 val record = if (isAddingNewDue && initialCredit != null) {
                                     val newNoteLog = buildString {
                                         if (initialCredit.notes.isNotBlank()) append("${initialCredit.notes}\n")
-                                        append("• New Due Added: ₹ $enteredDue on $entryDate @ $realWallClockTimestamp")
+                                        append("• New Due Added: ₹ ${String.format(Locale.US, "%.2f", enteredDue)} on $entryDate @ $realWallClockTimestamp")
                                     }
                                     initialCredit.copy(
                                         date = entryDate,
-                                        petrolQuantityLitre = initialCredit.petrolQuantityLitre + (petrolLitreText.toDoubleOrNull() ?: 0.0),
-                                        dieselQuantityLitre = initialCredit.dieselQuantityLitre + (dieselLitreText.toDoubleOrNull() ?: 0.0),
-                                        totalAmountDue = initialCredit.totalAmountDue + enteredDue,
+                                        petrolQuantityLitre = round2(initialCredit.petrolQuantityLitre + (petrolLitreText.toDoubleOrNull() ?: 0.0)),
+                                        dieselQuantityLitre = round2(initialCredit.dieselQuantityLitre + (dieselLitreText.toDoubleOrNull() ?: 0.0)),
+                                        totalAmountDue = round2(initialCredit.totalAmountDue + enteredDue),
                                         notes = newNoteLog
                                     )
                                 } else {
@@ -1819,8 +1819,8 @@ private fun AddEditCreditDialog(
                                         customerName = customerName.trim(),
                                         mobileNumber = mobileNo.trim(),
                                         fuelType = selectedFuelType,
-                                        petrolQuantityLitre = petrolLitreText.toDoubleOrNull() ?: 0.0,
-                                        dieselQuantityLitre = dieselLitreText.toDoubleOrNull() ?: 0.0,
+                                        petrolQuantityLitre = round2(petrolLitreText.toDoubleOrNull() ?: 0.0),
+                                        dieselQuantityLitre = round2(dieselLitreText.toDoubleOrNull() ?: 0.0),
                                         totalAmountDue = enteredDue
                                     )
                                 }
@@ -1938,15 +1938,15 @@ private fun SettleCreditDialog(
                     TextButton(onClick = onDismiss) { Text("Cancel") }
                     Spacer(Modifier.width(8.dp))
                     Button(onClick = {
-                        val addedPayment = paymentAmountText.toDoubleOrNull() ?: 0.0
+                        val addedPayment = round2(paymentAmountText.toDoubleOrNull() ?: 0.0)
                         if (addedPayment > 0.0) {
                             val realWallClockTimestamp = SimpleDateFormat("yyyy-MM-dd hh:mm a", Locale.getDefault()).format(Date())
                             val newNoteLog = buildString {
                                 if (credit.notes.isNotBlank()) append("${credit.notes}\n")
-                                append("• Settlement Received: ₹ $addedPayment on $settlementDate @ $realWallClockTimestamp ($selectedPaymentMode)")
+                                append("• Settlement Received: ₹ ${String.format(Locale.US, "%.2f", addedPayment)} on $settlementDate @ $realWallClockTimestamp ($selectedPaymentMode)")
                             }
                             val updated = credit.copy(
-                                amountPaid = credit.amountPaid + addedPayment,
+                                amountPaid = round2(credit.amountPaid + addedPayment),
                                 lastPaymentDate = settlementDate,
                                 notes = newNoteLog
                             )
